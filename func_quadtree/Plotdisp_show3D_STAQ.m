@@ -1,0 +1,119 @@
+function Plotdisp_show3D_STAQ(U,coordinatesFEM,elementsFEM,varargin)
+%PLOTDISP_SHOW: to plot DIC solved displacement components
+%   Plotdisp_show(U,coordinatesFEM,elementsFEM)
+% ----------------------------------------------
+%
+%   INPUT: U                 Displacement vector: 
+%                            U = [Ux_node1, Uy_node1, Ux_node2, Uy_node2, ... , Ux_nodeN, Uy_nodeN]';
+%          coordinatesFEM    FE mesh coordinates
+%          elementsFEM       FE mesh elements
+%          DICpara           chosen DIC parameters
+%          EdgeColorOrNot    show edge color or not
+%
+%   OUTPUT: Plots of x-displacement field and y-displacement field.
+%
+%   TODO: users could change caxis range based on their own choices.
+%
+% ----------------------------------------------
+% Author: Jin Yang.  
+% Contact and support: jyang526@wisc.edu -or- aldicdvc@gmail.com
+% Last date modified: 2020.12
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%% Initialization
+warning off;  U = full(U);
+
+%%%%% Parse Inputs %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+[ EdgeColorOrNot] = parseargs(varargin);
+ 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% convert pixel unit to the physical world unit %%%%%
+try um2px = DICpara.um2px; 
+catch um2px = 1;
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+try EdgeColorOrNot = EdgeColorOrNot;
+catch EdgeColorOrNot = 'EdgeColor';
+end
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ====== 1) dispx u ======
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+figure; show([],elementsFEM(:,1:4),coordinatesFEM,U(1:3:end),EdgeColorOrNot); 
+%figure; show([],elementsFEM(:,1:4),[coordinatesFEM(:,1),-coordinatesFEM(:,2)],U(1:3:end),EdgeColorOrNot); 
+
+title('$x-$displacement $u$','FontWeight','Normal','Interpreter','latex');
+view(2); set(gca,'fontsize',18); axis tight; axis equal; colorbar; % view([90 -90])
+if um2px==1, xlabel('$x$ (pixels)','Interpreter','latex'); ylabel('$y$ (pixels)','Interpreter','latex');
+else, xlabel('$x$','Interpreter','latex'); ylabel('$y$','Interpreter','latex');
+end
+set(gcf,'color','w'); colormap jet; box on;
+a = gca; a.TickLabelInterpreter = 'latex';
+b = colorbar; b.TickLabelInterpreter = 'latex';
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ====== 2) dispx v ======
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+figure; show([],elementsFEM(:,1:4),coordinatesFEM,U(2:3:end),EdgeColorOrNot); 
+%figure; show([],elementsFEM(:,1:4),[coordinatesFEM(:,1),-coordinatesFEM(:,2)],U(2:3:end),EdgeColorOrNot); 
+
+title('$y-$displacement $v$','FontWeight','Normal','Interpreter','latex');
+view(2); set(gca,'fontsize',18); axis tight; axis equal; colorbar;
+if um2px==1, xlabel('$x$ (pixels)','Interpreter','latex'); ylabel('$y$ (pixels)','Interpreter','latex');
+else, xlabel('$x$','Interpreter','latex'); ylabel('$y$','Interpreter','latex');
+end
+set(gcf,'color','w'); colormap jet; box on;
+a = gca; a.TickLabelInterpreter = 'latex';
+b = colorbar; b.TickLabelInterpreter = 'latex';
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ====== 3) dispx w ======
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+figure; show([],elementsFEM(:,1:4),coordinatesFEM,U(3:3:end),EdgeColorOrNot); 
+%figure; show([],elementsFEM(:,1:4),[coordinatesFEM(:,1),-coordinatesFEM(:,2)],U(3:3:end),EdgeColorOrNot); 
+
+title('$z-$displacement $w$','FontWeight','Normal','Interpreter','latex');
+view(2); set(gca,'fontsize',18); axis tight; axis equal; colorbar;
+if um2px==1, xlabel('$x$ (pixels)','Interpreter','latex'); ylabel('$y$ (pixels)','Interpreter','latex');
+else, xlabel('$x$','Interpreter','latex'); ylabel('$y$','Interpreter','latex');
+end
+set(gcf,'color','w'); colormap jet; box on;
+a = gca; a.TickLabelInterpreter = 'latex';
+b = colorbar; b.TickLabelInterpreter = 'latex';
+%caxis([-2.5 0])
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ====== 4) dispx Magnitude ======
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+figure; show([],elementsFEM(:,1:4),coordinatesFEM,...
+    sqrt(U(1:3:end).^2+U(2:3:end).^2+U(3:3:end).^2),EdgeColorOrNot); 
+
+title('$displacement Magnitude$','FontWeight','Normal','Interpreter','latex');
+view(2); set(gca,'fontsize',18); axis tight; axis equal; colorbar;
+if um2px==1, xlabel('$x$ (pixels)','Interpreter','latex'); ylabel('$y$ (pixels)','Interpreter','latex');
+else, xlabel('$x$','Interpreter','latex'); ylabel('$y$','Interpreter','latex');
+end
+set(gcf,'color','w'); colormap jet; box on;
+a = gca; a.TickLabelInterpreter = 'latex';
+b = colorbar; b.TickLabelInterpreter = 'latex';
+
+ 
+end
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+function [EdgeColorOrNot] = parseargs(vargin)
+ EdgeColorOrNot=[];  
+ 
+
+try
+    EdgeColorOrNot=vargin{1};
+catch
+end
+
+
+end

@@ -1,0 +1,85 @@
+function cameraParams_OpenCorr = cameraParamsFormatConvertFromOpenCorrFormat(CalibrationFilepath, CalibrationFile)
+% This function is used to convert calibration format from OpenCorr (.csv file)
+data = readtable(fullfile(CalibrationFilepath, CalibrationFile));
+
+cameraParams_OpenCorr = struct();
+
+for i = 1:height(data)
+    variableName = data{i, 1}{1};
+    value_left = data{i, 2};
+    value_right = data{i, 3};  
+
+    % Extract value based on parameter name
+            switch variableName
+                case 'Cx'
+                    LeftCx = value_left;
+                case 'Cy'
+                    LeftCy = paramValue;
+                case 'Fx'
+                    LeftFx = paramValue;
+                case 'Fy'
+                    LeftFy = paramValue;
+                case 'Fs'
+                    LeftFs = paramValue;
+                case 'K1'
+                    LeftK1 = paramValue;
+                case 'K2'
+                    LeftK2 = paramValue;
+                case 'K3'
+                    LeftK3 = paramValue;
+                case 'K4'
+                    LeftK4 = paramValue;
+                case 'K5'
+                    LeftK5 = paramValue;
+                case 'K6'
+                    LeftK6 = paramValue;
+                case 'P1'
+                    LeftP1 = paramValue;
+                case 'P2'
+                    LeftP2 = paramValue;
+                case 'Tx'
+                    LeftK1 = paramValue;
+                case 'Ty'
+                    LeftK2 = paramValue;
+                case 'Tz'
+                    LeftK3 = paramValue;
+                case 'Rx'
+                    LeftK1 = paramValue;
+                case 'Ry'
+                    LeftK2 = paramValue;
+                case 'Rz'
+                    LeftK3 = paramValue;
+            end
+ 
+    StereoInfo.(variableName) = value; 
+end
+
+% Conversion
+cameraParams_OpenCorr.cameraParamsLeft.K = [LeftFx LeftFs LeftCx; 0 LeftFy LeftCy ; 0 0 1];
+cameraParams_OpenCorr.cameraParamsRight.K = [RightFx RightFs RightCx; 0 RightFy RightCy ; 0 0 1];
+cameraParams_OpenCorr.rotationMatrix = [ROW_0;ROW_1;ROW_2];
+cameraParams_OpenCorr.translationVector = [Tx,Ty,Tz];
+
+try
+cameraParams_OpenCorr.cameraParamsLeft.RadialDistortion = [LeftK1,LeftK2,LeftK3];
+cameraParams_OpenCorr.cameraParamsRight.RadialDistortion = [RightK1,RightK2,RightK3];
+catch
+cameraParams_OpenCorr.cameraParamsLeft.RadialDistortion = [0,0,0];
+cameraParams_OpenCorr.cameraParamsRight.RadialDistortion = [0,0,0];
+end
+
+try 
+cameraParams_OpenCorr.cameraParamsLeft.TangentialDistortion = [LeftP1,LeftP2];
+cameraParams_OpenCorr.cameraParamsRight.TangentialDistortion = [RightP1,RightP2];
+catch
+cameraParams_OpenCorr.cameraParamsLeft.TangentialDistortion = [0,0];
+cameraParams_OpenCorr.cameraParamsRight.TangentialDistortion = [0,0];
+end
+
+
+cameraParams_Nodes = xmlread(fullfile(CalibrationFilepath, CalibrationFile));
+
+paramLists = cameraParams_Nodes.getElementsByTagName('ParameterList');
+
+
+
