@@ -1,11 +1,44 @@
-% ---------------------------------------------
-% Augmented Lagrangian Digital Image Correlation (AL-DIC)
-% working with an adaptive quadtree mesh
+%% ===================================================================
+% 3D Stereo Adaptive Quadtree Digital Image Correlation (3D-STAQ-DIC)
+% ===================================================================
 %
-% Author: Jin Yang, PhD @Caltech
-% Contact and support: jyang526@wisc.edu -or- aldicdvc@gmail.com
-% Date: 2015.04,06,07; 2016.03,04; 2020.11;2021.12
-% ---------------------------------------------
+% DESCRIPTION:
+%   This program implements a 3D stereo DIC method using adaptive quadtree mesh
+%   for full-field deformation measurement. The algorithm includes stereo 
+%   calibration, temporal matching, 3D reconstruction, and strain/stress computation.
+%
+% FEATURES:
+%   - Stereo camera calibration and matching
+%   - Adaptive quadtree mesh refinement
+%   - Temporal DIC tracking
+%   - 3D reconstruction and displacement field computation  
+%   - Strain and stress field computation and visualization
+%
+% MAIN WORKFLOW:
+%   1. Environment setup and image loading
+%   2. DIC parameter initialization
+%   3. Stereo calibration and matching
+%   4. Temporal matching using quadtree mesh
+%   5. 3D reconstruction
+%   6. Strain/stress computation and visualization
+%
+% AUTHOR:
+%   Zixiang (Zach) Tong (zachtong@utexas.edu)
+%   Jin Yang (jin.yang@austin.utexas.edu)
+%   University of Texas at Austin
+%
+% VERSION: 
+%   1.0 - June 2025
+%
+% REFERENCES:
+%   [Add relevant papers/publications]
+%
+% LICENSE:
+%   [Add license information]
+%
+%% ===================================================================
+
+
 
 %% Section 1: Clear MATLAB environment & mex set up Spline interpolation
 close all; clear; clc; clearvars -global
