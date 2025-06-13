@@ -29,13 +29,11 @@ switch paraName
 
     case 'IncrementalOrNot' % Incremental mode or not
         fprintf('\n');
-        fprintf('--- Do you want to use incremental mode? (For large deformation) --- \n');
-        fprintf('    0: Accumulative mode (Only first-step masks are needed) \n');
-        fprintf('    1: Incremental mode (Masks for each updated step are needed)  \n');
+        fprintf('--- Do you want to use incremental mode? --- \n');
+        fprintf('    0: Accumulative mode (Default) \n');
+        fprintf('    1: Incremental mode (For large deformation)  \n');
         prompt = 'Input here: '; IncrementalOrNot = input(prompt); paraInput = IncrementalOrNot;
         fprintf('\n');
-
-
 
     case 'InitFFTSearchMethod' % FFT-solver to compute the initial guess
         fprintf('\n');
@@ -89,7 +87,7 @@ switch paraName
         fprintf('\n');
         fprintf('--- Do you want to use data driven method for initial guess of the rest of images? --- \n');
         fprintf('    (Require that the motion between two images is not too large) \n');
-        fprintf('    0: Yes \n'); 
+        fprintf('    0: Yes \n');
         fprintf('    1: No \n');
         prompt = 'Input here: '; DataDrivenOrNot = input(prompt); paraInput = DataDrivenOrNot;
         fprintf('\n');
@@ -205,14 +203,14 @@ switch paraName
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %%%%% Section 9 %%%%%
-    case 'MaterialModel' % Material model: plane stress or plane strain?
-        fprintf('Material model to compute Cauchy stress fields: \n');
-        fprintf('    1: Linear elasticity -- Plane stress \n');
-        fprintf('    2: Linear elasticity -- Plane strain \n');
-        fprintf('    3: Others: User needs to edit codes in ./plotFiles/Plotstress.m   \n');
-        prompt = 'Input here: '; MaterialModel = input(prompt);
-        paraInput = MaterialModel;
-        fprintf('------------------------------------- \n');
+        % case 'MaterialModel' % Material model: plane stress or plane strain?
+        %     fprintf('Material model to compute Cauchy stress fields: \n');
+        %     fprintf('    1: Linear elasticity -- Plane stress \n');
+        %     fprintf('    2: Linear elasticity -- Plane strain \n');
+        %     fprintf('    3: Others: User needs to edit codes in ./plotFiles/Plotstress.m   \n');
+        %     prompt = 'Input here: '; MaterialModel = input(prompt);
+        %     paraInput = MaterialModel;
+        %     fprintf('------------------------------------- \n');
 
 
     otherwise

@@ -3,12 +3,10 @@ function StereoInfo = StereoCameraCalibration()
 % boardSize is the number of corners in each row and column of the calibration board.
 
 % squareSize
-% fprintf('What is the squareSize(mm)? \n')
-% prompt = 'Input here: ';
-% squareSize = input(prompt);
+fprintf('What is the squareSize(mm)? \n')
+prompt = 'Input here: ';
+squareSize = input(prompt);
 
-% Debug Zach
-squareSize = 10;
 
 % load images
 [leftImagesInfo,rightImagesInfo,~,~,~] = ReadImage3DStereo;
@@ -88,10 +86,10 @@ disp(cameraParams.TranslationOfCamera2);
 % Store results in a structure
 StereoInfo.cameraParams.cameraParamsLeft = cameraParams.CameraParameters1;
 StereoInfo.cameraParams.cameraParamsRight = cameraParams.CameraParameters2;
-StereoInfo.cameraParams.rotationMatrix = rotationMatrix;
-StereoInfo.cameraParams.translationVector = translationVector;
+StereoInfo.cameraParams.rotationMatrix = cameraParams.PoseCamera2.R;
+StereoInfo.cameraParams.translationVector = cameraParams.PoseCamera2.Translation;
 StereoInfo.cameraParams.FundamentalMatrix = cameraParams.FundamentalMatrix;
 StereoInfo.cameraParams.EssentialMatrix = cameraParams.EssentialMatrix;
-StereoInfo.cameraParams.estimationErrors = estimationErrors;
+% StereoInfo.cameraParams.estimationErrors = estimationErrors;
 % stereoCameras.reprojectionError = estimationErrors;
 end

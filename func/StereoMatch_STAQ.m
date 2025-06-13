@@ -13,30 +13,6 @@ Df = funImgGradient(Normalized_L,Normalized_L,NormalizedMask_L); % Finite differ
 % DICpara.InitFFTSearchMethod = 1;
 [DICpara,x0temp,y0temp,u,v,cc]= IntegerSearchQuadtree(Normalized_L,Normalized_R,file_name_L,DICpara,-1);
 
-% % %%%%% Optional codes to measure more gridded measurement points %%%%%
-% [DICpara,x0temp_f,y0temp_f,u_f,v_f,cc]= IntegerSearch(Normalized_L,Normalized_R,file_name_L,DICpara,-1);
-% 
-% xnodes = max([1+0.5*DICpara.winsize,DICpara.gridxyROIRange.gridx(1)])  ...
-%     : DICpara.winstepsize : min([size(Normalized_L,1)-0.5*DICpara.winsize-1,DICpara.gridxyROIRange.gridx(2)]);
-% ynodes = max([1+0.5*DICpara.winsize,DICpara.gridxyROIRange.gridy(1)])  ...
-%     : DICpara.winstepsize : min([size(Normalized_L,2)-0.5*DICpara.winsize-1,DICpara.gridxyROIRange.gridy(2)]);
-% 
-% [x0temp,y0temp] = ndgrid(xnodes,ynodes);   u_f_NotNanInd = find(~isnan(u_f(:)));
-% 
-% op1 = rbfcreate( [x0temp_f(u_f_NotNanInd),y0temp_f(u_f_NotNanInd)]',[u_f(u_f_NotNanInd)]','RBFFunction', 'thinplate');
-% rbfcheck_maxdiff = rbfcheck(op1); % Check: rbf thin-plate interpolation
-% if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-% u = rbfinterp([x0temp(:),y0temp(:)]', op1 );
-% 
-% op2 = rbfcreate( [x0temp_f(u_f_NotNanInd),y0temp_f(u_f_NotNanInd)]',[v_f(u_f_NotNanInd)]','RBFFunction', 'thinplate');
-% rbfcheck_maxdiff = rbfcheck(op2); % Check: rbf thin-plate interpolation
-% if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-% v = rbfinterp([x0temp(:),y0temp(:)]', op2 );
-% 
-% u = regularizeNd([x0temp(:),y0temp(:)],u(:),{xnodes',ynodes'},1e-3);
-% v = regularizeNd([x0temp(:),y0temp(:)],v(:),{xnodes',ynodes'},1e-3);
-
-
 % ====== FEM mesh set up ======
 [DICmesh] = MeshSetUp(x0temp,y0temp,DICpara); clear x0temp y0temp;
 % ====== Initial Value ======
@@ -46,7 +22,7 @@ U0 = Init(u,v,cc.max,DICmesh.x0,DICmesh.y0,0);
 % Set zero at holes
 linearIndices1 = sub2ind(size(NormalizedMask_L), DICmesh.coordinatesFEM(:,1), DICmesh.coordinatesFEM(:,2));
 MaskOrNot1 = NormalizedMask_L(linearIndices1);
-% 是否需要考虑 g 的mask? TBD
+% Do we need to consider the mask of g? TBD
 % u_inv = u'; v_inv = v';
 % linearIndices2 = sub2ind(size(NormalizedMask_R), floor(DICmesh.coordinatesFEM(:,1)+u_inv(:)), floor(DICmesh.coordinatesFEM(:,2)+v_inv(:)));
 % MaskOrNot2 = NormalizedMask_R(linearIndices2);
@@ -81,7 +57,6 @@ StereoInfo.ResultFEMeshEachFrame = struct( 'coordinatesFEM',...
 
 %% ICGN
 tol = 1e-3;
-
 
 if stereoMatchShapeOrder == 1
     % ====== 1st-order ICGN refinement  ======
