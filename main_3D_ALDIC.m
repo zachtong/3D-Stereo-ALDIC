@@ -208,7 +208,7 @@ RD_R = TemporalMatch_quadtree_ST1(DICpara,fileNameRight,maskRight,imgNormalized_
 matchedPairs = organizeMatchedPairds_quadtree_ST1(RD_L,RD_R,DICpara);
 % Calculate the 3D coordinates
 [FinalResult,reprojectionErrors] = stereoReconstruction_quadtree(matchedPairs,StereoInfo.cameraParams);
-
+                                                                                      
 % Optional:Check the 3D reconstruction results
 check3DReconstructionResults(reprojectionErrors, FinalResult, RD_L, 2);
 
@@ -287,8 +287,8 @@ for ImgSeqNum = 2: length(imgNormalized_L)
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % ------ Smooth displacements ------
-    prompt = 'Do you want to smooth displacement? (0-yes; 1-no)';
-    DoYouWantToSmoothOnceMore = input(prompt);
+    % prompt = 'Do you want to smooth displacement? (0-yes; 1-no)';
+    % DoYouWantToSmoothOnceMore = input(prompt);
     % ------ Smooth displacements ------
 
     SmoothTimes = 0;

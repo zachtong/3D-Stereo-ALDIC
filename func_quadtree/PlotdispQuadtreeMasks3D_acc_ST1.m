@@ -112,7 +112,7 @@ alpha(h2,OrigDICImgTransparency);  colormap("turbo"); caxis auto;
 % caxis([-35,35]); % caxis([-0.025,0.025]); 
 % caxis([-10,10]); D shaped
 %caxis([-0.08,0.03]);  % Bulge
-caxis([-2.5 0]);  % Pig heart
+%caxis([-2.5 0]);  % Pig heart
 
  %caxis([-1 0.5]);
 % colormap(black_rainbow);  
@@ -150,7 +150,7 @@ alpha(h2,OrigDICImgTransparency);  colormap("turbo"); caxis auto;
 % caxis([-0.7,0.7]);
 % caxis([0,10]); D shaped
 %caxis([-0.1 0.05]) % bulge
-caxis([-2 2]) % Pig heart
+%caxis([-2 2]) % Pig heart
 
 % caxis([-0.7,0.7]); % caxis([-0.025,0.025]); 
 % colormap(black_rainbow);    caxis([-0.5,0]);
@@ -187,7 +187,7 @@ alpha(h2,OrigDICImgTransparency);  colormap("turbo"); caxis auto;
 % caxis([-0.7,0.7]);
 % caxis([-0.3,0.3]); D shaped
 %caxis([0 1.2]) %bulge
-caxis([-1 3]) % pig heart
+%caxis([-1 3]) % pig heart
 % caxis([-0.7,0.7]); % caxis([-0.025,0.025]); 
 % colormap(black_rainbow);    caxis([-0.5,0]);
 %   colormap(jet); caxis([-20 20]);

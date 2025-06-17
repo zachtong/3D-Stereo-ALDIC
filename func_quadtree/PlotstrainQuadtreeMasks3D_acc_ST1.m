@@ -160,7 +160,7 @@ alpha(h2,OrigDICImgTransparency); colormap(turbo); caxis auto;
 % colormap(turbo); caxis([-1,1]) % D Sample 
 % colormap(turbo);   caxis([-0.25,0.25]) % foam
  % colormap(turbo); caxis([-0.1 0.5]) % D shaped
-caxis([-0.04 0.025]) %bulge
+%caxis([-0.04 0.025]) %bulge
 %caxis([-0.05 0.1]); 
 % colormap(turbo); caxis([-0.004,0]); % Sample 12
 % colormap(black_rainbow_plus);    clim([-0.005 0.005]);
@@ -198,7 +198,7 @@ alpha(h2,OrigDICImgTransparency); colormap(turbo); caxis auto;
 % colormap(turbo); caxis([-1,1]) % D Sample 
 % colormap(turbo);  caxis([-0.25,0.25]) % foam
 % colormap(turbo); caxis([-0.1 0.1]) % D shaped
-caxis([-0.017 0.017]) % bulge
+%caxis([-0.017 0.017]) % bulge
 %caxis([-0.06 0.07]) 
 % colormap(turbo); caxis([-0.008,0.008]); % Sample 12 
  %colormap(black_rainbow_plus);    caxis([-0.15 0.15]);
@@ -239,7 +239,7 @@ alpha(h2,OrigDICImgTransparency); colormap(turbo); caxis auto;
 % caxis([-0.05 0.05]) 
 % colormap(turbo); caxis([-0.2 -0.05]) % D shaped cb1
 % colormap(turbo); caxis([-0.1  0.01]) % D shaped cb2
-caxis([-0.02 0.025]) % bulge
+%caxis([-0.02 0.025]) % bulge
 % colormap(turbo); caxis([-0.002,0.017]); % Sample 12 
 %colormap(black_rainbow_plus);  caxis([-0.15 0.15]);
 %  colormap(black_rainbow); caxis([-0.0021,0.0021]);
@@ -456,7 +456,7 @@ alpha(h2,OrigDICImgTransparency); colormap(turbo); caxis auto;
 % colormap(turbo); caxis([-0.15,0]) % D Sample 
 % colormap(turbo);  caxis([-0.25,0.25])% foam
  % colormap(turbo);  caxis([-0.02 0.02]) % D shapoed
- caxis([-0.13 0.12])  % bulge
+% caxis([-0.13 0.12])  % bulge
 %caxis([-0.2 0.35]) 
 % colormap(turbo); caxis([-0.002,0.017]); % Sample 12 
 %colormap(black_rainbow_plus);  caxis([-0.15 0.15]);
@@ -493,7 +493,7 @@ alpha(h2,OrigDICImgTransparency); colormap(turbo);  caxis auto;
 % colormap(turbo); caxis([-0.15,0]) % D Sample 
 % colormap(turbo);  caxis([-0.25,0.25])% foam
 %  colormap(turbo);  caxis([-0.02 0.02]) % D shaped
-caxis([-0.15 0.15]) %bulge
+%caxis([-0.15 0.15]) %bulge
 %caxis([-0.2 0.22]) 
 % colormap(turbo); caxis([-0.002,0.017]); % Sample 12 
 %colormap(black_rainbow_plus);  caxis([-0.15 0.15]);
