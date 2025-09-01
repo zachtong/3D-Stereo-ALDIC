@@ -27,6 +27,15 @@ winsize = DICpara.winsize;
 winstepsize = DICpara.winstepsize;
 showImgOrNot = DICpara.showImgOrNot;
 
+% Zach:
+% switch camera0OrNot
+%     case 'camera0'
+%     ImgRefMask = DICpara.ImgRefMask_left;
+%     case 'notCamera0'
+%     ImgRefMask = DICpara.ImgRefMask_right;
+% end
+% figure;imshow(ImgRefMask);
+
 try
     InitFFTSearchMethod = DICpara.InitFFTSearchMethod;
     % disp(num2str(InitFFTSearchMethod));

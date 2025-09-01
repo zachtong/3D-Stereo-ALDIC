@@ -6,7 +6,7 @@ function [RD] = TemporalMatch_quadtree_ST1(DICpara,file_name,ImgMask,ImgNormaliz
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% debug options
-UseGlobal = 1;
+UseGlobal = 1; % Zach 20250620
 DICpara.showImgOrNot = 1;
 
 % Init
@@ -44,7 +44,22 @@ for ImgSeqNum = 2 : imageNum
 
     Df = funImgGradient(fNormalized,fNormalized,fNormalizedMask);
 
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Zach Attention: because DICpara only stores left image info, to
+    % consider the right image temporal matching, we "fake" update masks
+    % and ROIrange (we didn't really change the DICpara in this func)
     DICpara.ImgRefMask = fNormalizedMask;
+
+    if strcmp(camera0OrNot, 'notCamera0') 
+        [temp_rows, temp_cols] = find(fNormalizedMask);
+        temp_gridx(1) = min(temp_rows);
+        temp_gridy(1) = min(temp_cols); 
+        temp_gridx(2) = max(temp_rows);
+        temp_gridy(2) = max(temp_cols); 
+        DICpara.gridxyROIRange.gridx = temp_gridx;
+        DICpara.gridxyROIRange.gridy = temp_gridy;
+    end
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     if DICpara.showImgOrNot
         figure;
@@ -433,8 +448,8 @@ switch incOrNot
             % RD.ResultDefGrad{ImgSeqNum-1,1}.F = full(FSubpb2); % tempFoamAL;
             % RD.DICmesh{ImgSeqNum-1} = DICmesh;
         else % regardless subproblem2
-            RD.ResultDisp_acc{ImgSeqNum-1}.U = full(USubpb1);
-            RD.ResultDisp{ImgSeqNum-1}.ALSub1BadPtNum = ALSub1BadPtNum;
+            RD.ResultDisp_acc{ImgSeqNum-1,1}.U = full(USubpb1);
+            RD.ResultDisp{ImgSeqNum-1,1}.ALSub1BadPtNum = ALSub1BadPtNum;
             % RD.ResultDefGrad{ImgSeqNum-1}.F = full(FSubpb1); % tempFoamAL;
             % RD.DICmesh{ImgSeqNum-1} = DICmesh;
         end
@@ -526,11 +541,21 @@ if DICpara.showImgOrNot
     % close all; Plotuv(U_inc,DICmesh_init.x0,DICmesh_init.y0World);
     % Plotdisp_show(U_inc,DICmesh_init.coordinatesFEMWorld,DICmesh_init.elementsFEM);
     % else
-    USubpb2World = USubpb2; USubpb2World(2:2:end) = -USubpb2(2:2:end);
-    FSubpb2World = FSubpb2; FSubpb2World(2:4:end) = -FSubpb2World(2:4:end); FSubpb2World(3:4:end) = -FSubpb2World(3:4:end);
-    close all; % plotuv(USubpb2World,DICmesh_quadtree.x0,DICmesh_quadtree.y0World);
-    Plotdisp_show(USubpb2World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM);
-    Plotdisp_show(USubpb1World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
+
+    if UseGlobal
+        USubpb2World = USubpb2; USubpb2World(2:2:end) = -USubpb2(2:2:end);
+        FSubpb2World = FSubpb2; FSubpb2World(2:4:end) = -FSubpb2World(2:4:end); FSubpb2World(3:4:end) = -FSubpb2World(3:4:end);
+        close all; % plotuv(USubpb2World,DICmesh_quadtree.x0,DICmesh_quadtree.y0World);
+        Plotdisp_show(USubpb2World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM);
+        Plotdisp_show(USubpb1World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
+    else
+        USubpb2World = USubpb1; USubpb2World(2:2:end) = -USubpb1(2:2:end);
+        FSubpb2World = FSubpb1; FSubpb2World(2:4:end) = -FSubpb2World(2:4:end); FSubpb2World(3:4:end) = -FSubpb2World(3:4:end);
+        close all; % plotuv(USubpb2World,DICmesh_quadtree.x0,DICmesh_quadtree.y0World);
+        Plotdisp_show(USubpb2World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM);
+        Plotdisp_show(USubpb1World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
+    end
+    
     % end
 else
 end

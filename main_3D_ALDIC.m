@@ -65,7 +65,6 @@ fprintf('------------ Section 2 Start ------------ \n')
 % ====== Read images and masks ======
 % Load DIC raw images
 [fileNameLeft, fileNameRight, imageLeft,imageRight, LoadImgMethod] = ReadImage3DStereo_STAQ;
-
 DICpara = setDICParas_IncOrNot(size(fileNameRight,2));
 
 % Load DIC masks
@@ -113,6 +112,11 @@ end
 
 DICpara.ImgRefMask = double(maskLeft{1});
 
+
+% DICpara.ImgRefMask_left = double(maskLeft{1});
+% DICpara.ImgRefMask_right = double(maskRight{1});
+
+
 fprintf('------------ Section 2 Done ------------ \n \n')
 
 %% Section 3.1 Stereo Calibration
@@ -157,6 +161,10 @@ stereoMatchShapeOrder = 1; % Currently, we only support 1st shape function
 [StereoInfo, RD_L, RD_R] = StereoMatch_STAQ(RD_L,RD_R,imgNormalized_L{1},imgNormalized_R{1},...
     fileNameLeft,maskLeft{1},maskRight{1} ,DICpara,StereoInfo,stereoMatchShapeOrder);
 
+% debug
+figure; imshow(maskLeft{1});
+figure; imshow(maskRight{1});
+
 %%%%%%%%%%%%%%%%%%%%% Test 3D construction: START %%%%%%%%%%%%%%%%%%%%%
 RD0_L_Pts = StereoInfo.ResultFEMeshEachFrame.coordinatesFEM;
 RD0_R_Pts = StereoInfo.ResultFEMesh_corr;
@@ -196,11 +204,11 @@ disp(['mean_repo = ',num2str(mean(reprojectionErrors{1}))]);
 
 %% Section 4 Temporal Matching
 % Left image series
-    shapeFuncOrder = 1; % Curre1ntly, we only support 1st shape function
-    RD_L = TemporalMatch_quadtree_ST1(DICpara, fileNameLeft,maskLeft,imgNormalized_L,RD_L,StereoInfo, 'camera0',shapeFuncOrder);
+shapeFuncOrder = 1; % Curre1ntly, we only support 1st shape function
+RD_L = TemporalMatch_quadtree_ST1(DICpara, fileNameLeft,maskLeft,imgNormalized_L,RD_L,StereoInfo, 'camera0',shapeFuncOrder);
 
 %% Right image series
-shapeFuncOrder = 1; % Curre1ntly, we only support 1st shape function
+shapeFuncOalized_rder = 1; % Curre1ntly, we only support 1st shape function
 RD_R = TemporalMatch_quadtree_ST1(DICpara,fileNameRight,maskRight,imgNormalized_R,RD_R,StereoInfo, 'notCamera0',shapeFuncOrder);
 
 %% Section 5 3D-Result
@@ -210,7 +218,7 @@ matchedPairs = organizeMatchedPairds_quadtree_ST1(RD_L,RD_R,DICpara);
 [FinalResult,reprojectionErrors] = stereoReconstruction_quadtree(matchedPairs,StereoInfo.cameraParams);
                                                                                       
 % Optional:Check the 3D reconstruction results
-check3DReconstructionResults(reprojectionErrors, FinalResult, RD_L, 2);
+check3DReconstructionResults(reprojectionErrors, FinalResult, RD_L,13);
 
 %% Section 6: Compute strains/ Plot disp. and strains
 close all;
@@ -247,7 +255,7 @@ DICpara.MethodToSaveFig = funParaInput('SaveFigFormat');
 DICpara.OrigDICImgTransparency = 1;
 if DICpara.MethodToSaveFig == 1
     % DICpara.OrigDICImgTransparency = funParaInput('OrigDICImgTransparency');
-    DICpara.OrigDICImgTransparency = 0.5;
+    DICpara.OrigDICImgTransparency = 0.8;
 end
 
 %--------- Transform the disp. to other coor. sys.?---------
@@ -275,7 +283,7 @@ coefficients = cell(3,1);
 FinalResult.ResultStrainWorld{1} = 0;
 FinalResult.Displacement_smooth(1,:) = FinalResult.Displacement(1,:); % All zeros
 
-for ImgSeqNum = 2: length(imgNormalized_L)
+for ImgSeqNum = 6: length(imgNormalized_L)
     disp(['Current image frame #: ', num2str(ImgSeqNum),'/',num2str(length(imgNormalized_L))]);
     close all;
     ImageName = fileNameLeft{1,ImgSeqNum};
@@ -324,6 +332,11 @@ for ImgSeqNum = 2: length(imgNormalized_L)
         if DICpara.transformDisp == 0
             PlotdispQuadtreeMasks3D_acc_ST1(FinalResult.DisplacementNew(ImgSeqNum,:),RD_L.ResultDisp{ImgSeqNum-1,1}.U,...
                 RD_L.ResultFEMeshEachFrame{1,1}, FullImageName_first,FullImageName_current,DICpara,voidIndex);
+            % 
+            % PlotWarpage(FinalResult.warpage(ImgSeqNum,:),RD_L.ResultDisp{ImgSeqNum-1,1}.U,...
+            %     RD_L.ResultFEMeshEachFrame{1,1}, FullImageName_first,FullImageName_current,DICpara,voidIndex);
+            % 
+            % 
         else
             PlotdispQuadtreeMasks3D_acc_ST1(FinalResult.Displacement(ImgSeqNum,:),RD_L.ResultDisp{ImgSeqNum-1,1}.U,...
                 RD_L.ResultFEMeshEachFrame{1,1}, FullImageName_first,FullImageName_current,DICpara,voidIndex);
@@ -355,8 +368,9 @@ for ImgSeqNum = 2: length(imgNormalized_L)
     %     'strain_maxshear',strain_maxshear,'strain_vonMises',strain_vonMises
     clear strain_exx  strain_eyy  strain_ezz  strain_exy  strain_eyz  strain_exz strain_maxshear strain_principal_max strain_principal_min strain_vonMises
     % ------ Save figures for tracked displacement and strain fields ------
-    % SaveFigFilesDispAndStrain;
-
+    %SaveFigFilesDispAndStrain;
+    % figure(5);
+    % clim([-0.04 0.04])
     close all;
 
 end

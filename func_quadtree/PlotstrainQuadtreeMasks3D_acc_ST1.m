@@ -161,7 +161,7 @@ alpha(h2,OrigDICImgTransparency); colormap(turbo); caxis auto;
 % colormap(turbo);   caxis([-0.25,0.25]) % foam
  % colormap(turbo); caxis([-0.1 0.5]) % D shaped
 %caxis([-0.04 0.025]) %bulge
-%caxis([-0.05 0.1]); 
+caxis([-0.0001 0.0001]); 
 % colormap(turbo); caxis([-0.004,0]); % Sample 12
 % colormap(black_rainbow_plus);    clim([-0.005 0.005]);
 % colormap(black_rainbow); caxis([-0.004,0.004]);

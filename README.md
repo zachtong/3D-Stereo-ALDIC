@@ -15,8 +15,9 @@
 
 ## Requirements
 - Image Processing Toolbox
+- Statistics and Machine Learning Toolbox
 - Computer Vision Toolbox
-- C++ compiler for MEX file compilation
+- minGW 64 C++ compiler for MEX file compilation
 
 ## Code manual 
 [Under development]
@@ -41,7 +42,7 @@ Previous works:
 2. Prepare stereo image pairs of your specimen
 3. Run the main script:
 ```matlab
-main_STAQDIC_3D_ST1
+main_3D_ALDIC
 ```
 
 ## Input Data Format

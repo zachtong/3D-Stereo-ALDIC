@@ -160,8 +160,8 @@ Img_1 = cell(numImages,1);
 
 for i = 1:numImages
 
-    Img_0{i} = imread(full_path_0{1,i});
-    Img_1{i} = imread(full_path_1{1,i});
+    Img_0{i} = imread(fullfile(full_path_0{2,i},full_path_0{1,i}));
+    Img_1{i} = imread(fullfile(full_path_1{2,i},full_path_1{1,i}));
 
     % Change color RGB images to grayscale images
     [~, ~, numberOfColorChannels_0] = size(Img_0{i});
