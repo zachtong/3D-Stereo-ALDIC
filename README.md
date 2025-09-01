@@ -1,5 +1,5 @@
 # 3D-Stereo-ALDIC
-
+![Demo video](assets/images/stereo-ALDIC_demo.gif)
 ## Overview
 3D-Stereo-ALDIC (3D Stereo Adaptive Mesh Augmented Lagrangian Digital Image Correlation) is a MATLAB-based implementation for full-field 3D deformation measurement using stereo vision and adaptive quadtree mesh refinement. This tool provides accurate and efficient 3D displacement, strain measurements for experimental mechanics applications.
 
