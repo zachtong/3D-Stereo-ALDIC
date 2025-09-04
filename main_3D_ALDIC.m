@@ -260,15 +260,14 @@ end
 
 %--------- Transform the disp. to other coor. sys.?---------
 RotationMatrix = [1 0 0; 0 1 0; 0 0 1]; TranslationMatrix = [0 0 0];
-if isempty(DICpara.transformDisp) || DICpara.transformDisp == 1
-    DICpara.transformDisp = funParaInput('TransformDispOrNot');
-    if DICpara.transformDisp == 0
-        Base_Points2D = getBasePoints(imageLeft{1,1});
-        [RotationMatrix,TranslationMatrix] = GetRTMatrix( RD_L.ResultFEMeshEachFrame{1,1}.coordinatesFEM, Base_Points2D, FinalResult.Coordinates(1,:));
-        DICpara.RforStrainCal = RotationMatrix;
-        close all;
-    end
+DICpara.transformDisp = funParaInput('TransformDispOrNot');
+if DICpara.transformDisp == 1
+    Base_Points2D = getBasePoints(imageLeft{1,1}',maskLeft{1,1}');
+    [RotationMatrix,TranslationMatrix] = GetRTMatrix( RD_L.ResultFEMeshEachFrame{1,1}.coordinatesFEM, Base_Points2D, FinalResult.Coordinates(1,:));
+    DICpara.RforStrainCal = RotationMatrix;
+    close all;
 end
+
 
 % ------ Start main part ------
 prompt = 'What is your strain size? e.g. 3,5,7...\nInput: ';
@@ -283,7 +282,7 @@ coefficients = cell(3,1);
 FinalResult.ResultStrainWorld{1} = 0;
 FinalResult.Displacement_smooth(1,:) = FinalResult.Displacement(1,:); % All zeros
 
-for ImgSeqNum = 3: length(imgNormalized_L)
+for ImgSeqNum = 2: length(imgNormalized_L)
     disp(['Current image frame #: ', num2str(ImgSeqNum),'/',num2str(length(imgNormalized_L))]);
     close all;
     ImageName = fileNameLeft{1,ImgSeqNum};
@@ -384,7 +383,7 @@ for ImgSeqNum = 3: length(imgNormalized_L)
     clear strain_exx  strain_eyy  strain_ezz  strain_exy  strain_eyz  strain_exz strain_maxshear strain_principal_max strain_principal_min strain_vonMises
    
     % ------ Save figures for tracked displacement and strain fields ------
-    SaveFigFilesDispAndStrain(DICpara, fileNameLeft, ImgSeqNum,'FileFormat','pdf');
+    SaveFigFilesDispAndStrain(DICpara, fileNameLeft, ImgSeqNum,'FileFormat',DICpara.MethodToSaveFig);
     close all;
 
 end

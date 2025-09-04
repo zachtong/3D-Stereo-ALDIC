@@ -176,11 +176,28 @@ switch paraName
 
     case 'SaveFigFormat' % Finally saved figure format
         fprintf('Save figures into the format: \n');
-        fprintf('    1: jpg(Choose transparency 0~1) \n');
-        fprintf('    2: pdf(Choose transparency = 1) \n');
-        fprintf('    3: Others: Edit codes in ./plotFiles/SaveFigFiles.m \n');
+        fprintf('    1: jpg \n');
+        fprintf('    2: png \n');
+        fprintf('    3: pdf \n');
+        fprintf('    4: eps \n');
+        fprintf('    5: tif \n');
+        fprintf('    6: fig \n');
         prompt = 'Input here: '; MethodToSaveFig = input(prompt);
-        paraInput = MethodToSaveFig;
+        
+        switch MethodToSaveFig
+            case 1
+                paraInput = 'jpg';
+            case 2
+                paraInput = 'png';
+            case 3
+                paraInput = 'pdf';
+            case 4
+                paraInput = 'eps';
+            case 5
+                paraInput = 'tif';
+            case 6
+                paraInput = 'fig';
+        end
         fprintf('------------------------------------- \n');
 
 
@@ -194,8 +211,8 @@ switch paraName
 
     case 'TransformDispOrNot' % Transform disp. to other coor. systems.
         fprintf('Do you wanna transform the displacement to other coordinate system? \n')
-        fprintf('0: Yes \n')
-        fprintf('1: Not \n')
+        fprintf('0: No \n')
+        fprintf('1: Yes \n')
         prompt = 'Input here: '; TransformDispOrNot = input(prompt);
         paraInput = TransformDispOrNot;
         fprintf('------------------------------------- \n');

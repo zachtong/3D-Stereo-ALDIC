@@ -1,4 +1,4 @@
-function Base_Points_2D = getBasePoints(imageLeft)
+function Base_Points_2D = getBasePoints(imageLeft,maskLeft)
 %GETBASEPOINTS Interactive selection of 3 base points to define coordinate system
 %
 % INPUTS:
@@ -23,22 +23,53 @@ end
 %% Prepare image for display
 % Handle different image formats
 if size(imageLeft, 3) > 1
-    imageLeft = rgb2gray(imageLeft');  % Convert to grayscale if RGB
+    imageLeft = rgb2gray(imageLeft);  % Convert to grayscale if RGB
 end
 
 % Handle different data types
 if any(imageLeft(:) > 255)
     % 16-bit or higher
-    displayImg = uint16(imageLeft');
+    displayImg = uint16(imageLeft);
 else
     % 8-bit
-    displayImg = uint8(imageLeft');
+    displayImg = uint8(imageLeft);
 end
 
 %% Interactive point selection
 figure('Name', 'Base Points Selection', 'NumberTitle', 'off');
 imshow(displayImg);  % Remove transpose - display image correctly
 axis on; grid on;
+
+% --- mask overlay (new code) ---
+if nargin > 1 && ~isempty(maskLeft)
+    hold on;
+    
+    % find mask boundary
+    B = bwboundaries(maskLeft, 'noholes');
+    
+    % create a semi-transparent overlay for the mask interior
+    h = imshow(cat(3, zeros(size(maskLeft)), ones(size(maskLeft)), zeros(size(maskLeft)))); % green color
+    set(h, 'AlphaData', 0.3 * maskLeft); % set transparency for the mask region
+    
+    % draw a thick, opaque boundary
+    for k = 1:length(B)
+        boundary = B{k};
+        plot(boundary(:,2), boundary(:,1), 'r-', 'linewidth', 3); % red boundary
+    end
+end
+% --- end of new code ---
+
+
+
+
+
+
+
+
+
+
+
+
 title({'Click 3 points to define coordinate system:', ...
        '1st: Origin (O)', '2nd: X-axis direction', '3rd: Y-axis direction'}, ...
        'FontWeight', 'normal', 'FontSize', 14);
@@ -121,7 +152,7 @@ response = questdlg('Are you satisfied with the selected points?', ...
                    'Confirm Selection', 'Yes', 'No', 'Yes');
 if strcmp(response, 'No')
     close;
-    Base_Points_2D = getBasePoints(imageLeft);  % Recursive call to restart
+    Base_Points_2D = getBasePoints(imageLeft,maskLeft);  % Recursive call to restart
     return;
 end
 
