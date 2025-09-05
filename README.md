@@ -27,7 +27,7 @@
 
 
 ## Citation
-* [1] Tong, Z, et. al. 3D Stereo Adaptive Mesh Augmented Lagrangian Digital Image Correlation. https://doi.org/10.21203/rs.3.rs-5507109/v1
+* [1] Tong, Z, et. al. 3D Stereo Adaptive Mesh Augmented Lagrangian Digital Image Correlation. https://doi.org/10.1007/s11340-025-01225-7
 * [2] Tong, Z, et, al. Machine Learning-Aided Spatial Adaptation for Improved Digital Image Correlation Analysis of Complex Geometries. https://doi.org/10.21203/rs.3.rs-5566473/v1
 
 Previous works:
@@ -62,7 +62,7 @@ We welcome contributions to improve 3D-Stereo-ALDIC. Please feel free to submit 
 ## Citation
 If you use this code in your research, please cite:
 [3D Stereo Adaptive Mesh Augmented Lagrangian Digital Image Correlation]
-https://www.researchsquare.com/article/rs-5507109/v1
+https://doi.org/10.1007/s11340-025-01225-7
 
 ## License
 MIT License.
