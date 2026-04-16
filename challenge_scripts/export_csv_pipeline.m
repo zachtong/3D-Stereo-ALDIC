@@ -37,21 +37,24 @@ function export_csv_pipeline(mat_file, frame_map, output_root)
         'VSG_43', 19;   % exact 43
         'VSG_63', 39;   % exact 63
     };
+    num_vsg = size(vsg_configs, 1);
+    num_frames = length(frame_map);
 
     % === Interpolate reference 3D coords ONCE (shared across all frames) ===
-    fprintf('\n--- Interpolating reference 3D coords to step=1 dense grid ---\n');
     zero_disp = zeros(size(coords3D_ref_sparse));
     [coords2D_dense, coords3D_dense, ~, mask_dense] = ...
         interpolate_to_dense_grid_from_mask(coords2D_sparse, coords3D_ref_sparse, ...
                                              zero_disp, DICpara, 1);
+    fprintf('Dense grid: %d points, %d valid\n\n', ...
+        size(coords2D_dense, 1), sum(mask_dense));
 
-    N_dense = size(coords2D_dense, 1);
-    fprintf('Dense grid: %d points, %d valid\n', N_dense, sum(mask_dense));
+    pipeline_start = tic;
 
     % === Loop frames — SAME compute path for every frame ===
-    for i = 1:length(frame_map)
+    for i = 1:num_frames
         fm = frame_map(i);
-        fprintf('\n=== Frame %s (mat idx %d) ===\n', fm.csv_name, fm.mat_index);
+        fprintf('========== Frame %s [%d/%d] ==========\n', ...
+                fm.csv_name, i, num_frames);
 
         % Extract sparse displacement for this frame (specimen coords)
         U = FinalResult.DisplacementNew{fm.mat_index, 1};
@@ -59,9 +62,8 @@ function export_csv_pipeline(mat_file, frame_map, output_root)
         W = FinalResult.DisplacementNew{fm.mat_index, 3};
         disp_sparse_f = [U, V, W];
 
-        % Log raw noise level for verification (especially for reference f=1)
         u_mag = sqrt(U.^2 + V.^2 + W.^2);
-        fprintf('  Sparse disp: |U| mean=%.5f mm, max=%.5f mm\n', ...
+        fprintf('  Sparse disp |U| mean=%.5f mm, max=%.5f mm\n', ...
             mean(u_mag, 'omitnan'), max(u_mag, [], 'omitnan'));
 
         % Interpolate displacement to dense grid
@@ -69,12 +71,12 @@ function export_csv_pipeline(mat_file, frame_map, output_root)
             coords2D_sparse, coords3D_ref_sparse, disp_sparse_f, DICpara, 1);
 
         % Recompute strain per VSG on the dense grid
-        for v = 1:size(vsg_configs, 1)
+        for v = 1:num_vsg
             vsg_name    = vsg_configs{v,1};
             strain_size = vsg_configs{v,2};
 
-            fprintf('  > Computing strain for %s (strain_size=%d) ...\n', ...
-                vsg_name, strain_size);
+            fprintf('  --- Frame %s: %s [%d/%d] ---\n', ...
+                fm.csv_name, vsg_name, v, num_vsg);
 
             % R = eye(3): CoordinatesNew is already in specimen coords (do NOT re-rotate)
             [exx, eyy, exy, e1, e2] = compute_strain_dense_grid_lowmem( ...
@@ -86,7 +88,10 @@ function export_csv_pipeline(mat_file, frame_map, output_root)
                 coords2D_dense, coords3D_dense, disp_dense, ...
                 exx, eyy, exy, e1, e2, mask_dense);
         end
+        fprintf('  Frame %s done. Total elapsed: %.1f min\n\n', ...
+            fm.csv_name, toc(pipeline_start)/60);
     end
 
-    fprintf('\n======= CSV EXPORT COMPLETE =======\n');
+    fprintf('======= CSV EXPORT COMPLETE (%.1f min) =======\n', ...
+        toc(pipeline_start)/60);
 end
