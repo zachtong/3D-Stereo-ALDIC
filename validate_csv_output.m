@@ -8,6 +8,7 @@
 close all; clear; clc;
 
 all_passed = true;
+warnings_count = 0;
 
 expected_cols = {'X_image','Y_image','X','Y','Z','U','V','W', ...
                  'epsilon_xx','epsilon_yy','epsilon_xy','epsilon_1','epsilon_2'};
@@ -133,6 +134,8 @@ try
             fprintf(2, '  - %s\n', violations{v});
         end
         fprintf(2, '(Monotonicity is an approximate check; not fatal.)\n');
+        warnings_count = warnings_count + numel(violations);
+        fprintf('Check 5 PASSED (with %d monotonicity warning(s))\n', numel(violations));
     end
 catch ME
     fprintf(2, 'Check 5 FAILED: %s\n', ME.message);
@@ -141,7 +144,12 @@ end
 
 %% Final summary
 if all_passed
-    fprintf('\n✓✓✓ ALL CHECKS PASSED — CSV submission is ready ✓✓✓\n');
+    if warnings_count == 0
+        fprintf('\n✓✓✓ ALL CHECKS PASSED — CSV submission is ready ✓✓✓\n');
+    else
+        fprintf('\n✓✓✓ ALL CHECKS PASSED with %d non-fatal warning(s) — review above ✓✓✓\n', ...
+                warnings_count);
+    end
 else
     error('validate_csv_output:failures', ...
           'Some checks failed; see messages above.');
