@@ -6,8 +6,21 @@ function [RD] = TemporalMatch_quadtree_ST1(DICpara,file_name,ImgMask,ImgNormaliz
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% debug options
-UseGlobal = 1; % Zach 20250620
-DICpara.showImgOrNot = 1;
+UseGlobal = 1; % 0=Local DIC only (fast), 1=ALDIC with global constraints
+DICpara.showImgOrNot = 0;  % Set to 1 for debugging, 0 for batch processing
+
+% Auto-enable parallel computing if Parallel Computing Toolbox available
+if DICpara.ClusterNo <= 1
+    try
+        nCores = feature('numcores');
+        if nCores > 1 && license('test', 'Distrib_Computing_Toolbox')
+            DICpara.ClusterNo = nCores;
+            fprintf('Auto-enabled parallel ICGN with %d workers\n', nCores);
+        end
+    catch
+        % Keep sequential if detection fails
+    end
+end
 
 % Init
 imageNum = length(ImgNormalized);
@@ -15,20 +28,15 @@ incOrNot = DICpara.DICIncOrNot; % 0: acc, 1: inc
 
 
 
-if length(ImgNormalized) > 7
-    DICpara.dataDrivenOrNot = funParaInput('DataDrivenOrNot');
-    if DICpara.dataDrivenOrNot == 0
-        ImgStartDataDrivenMode = 7;
-    else
-        ImgStartDataDrivenMode = length(ImgNormalized) + 1;
-    end
-else
-    ImgStartDataDrivenMode = length(ImgNormalized) + 1;
-end
+% Data-driven mode (use previous-frame result as initial guess after frame
+% 7) removed — the alternate branch was fully commented out. The "smart
+% FFT skip" logic in the frame loop below already covers the inc-mode
+% reuse case without needing a mode flag.
+ImgStartDataDrivenMode = length(ImgNormalized) + 1;
 
 %% For loop
 for ImgSeqNum = 2 : imageNum
-    disp(['Current image frame #: ', num2str(ImgSeqNum),'/',num2str(length(ImgNormalized))]);
+    fprintf('--- Frame %d/%d ---\n', ImgSeqNum, length(ImgNormalized));
 
     if incOrNot == 1
         fNormalizedMask = double(ImgMask{ImgSeqNum-1} ) ; % Load the mask file of previous frame
@@ -69,39 +77,51 @@ for ImgSeqNum = 2 : imageNum
         subplot(2,2,4); imshow(gNormalizedMask'); title('g mask'); colorbar;
     end
     %% Section 3: Compute an initial guess of the unknown displacement field
-    fprintf('\n'); fprintf('------------ Section 3 Start ------------ \n')
+    % Section 3: Initial guess
 
-    % Default: FFT initial search for each image
-    DICpara.NewFFTSearch = 1; % DICpara.InitFFTSearchMethod = [];
+    % Decide FFT search strategy for initial guess
+    useFFTSearch = true;
+    if incOrNot == 1 && ImgSeqNum >= 3
+        try
+            prevDisp = RD.ResultDisp_inc{ImgSeqNum-2, 1}.U;  % [2N_prev x 1]
+            prevCoords = RD.ResultFEMeshEachFrame{ImgSeqNum-2, 1}.coordinatesFEM;  % [N_prev x 2]
+            prevU_x = prevDisp(1:2:end); prevU_y = prevDisp(2:2:end);
+            validFrac = 1 - nnz(isnan(prevU_x)) / numel(prevU_x);
+            if validFrac > 0.5, useFFTSearch = false; end
+        catch
+            % Fall back to FFT search if previous result unavailable
+        end
+    end
 
+    DICpara.NewFFTSearch = 1;
 
     if ImgSeqNum <=ImgStartDataDrivenMode || DICpara.NewFFTSearch == 1
-        % ====== Integer Search ======
-        %  DICpara.InitFFTSearchMethod = 1;
-        [DICpara,x0temp,y0temp,u,v,cc]= IntegerSearchQuadtree(fNormalized,gNormalized,file_name,DICpara,ImgSeqNum);
+        if useFFTSearch
+            % ====== Integer Search (FFT) ======
+            [DICpara,x0temp,y0temp,u,v,cc]= IntegerSearchQuadtree(fNormalized,gNormalized,file_name,DICpara,ImgSeqNum);
+        else
+            % ====== Skip FFT: use previous frame displacement as initial guess ======
+            fprintf('  Skipping FFT: reusing previous frame result (%.0f%% valid)\n', 100*validFrac);
+            winsize_v = DICpara.winsize; if isscalar(winsize_v), winsize_v = [winsize_v winsize_v]; end
+            winstep_v = DICpara.winstepsize; if isscalar(winstep_v), winstep_v = [winstep_v winstep_v]; end
+            gridxROI = DICpara.gridxyROIRange.gridx;
+            gridyROI = DICpara.gridxyROIRange.gridy;
+            XList = gridxROI(1) : winstep_v(1) : gridxROI(2) - winsize_v(1) - winstep_v(1);
+            YList = gridyROI(1) : winstep_v(2) : gridyROI(2) - winsize_v(2) - winstep_v(2);
+            [x0temp, y0temp] = ndgrid(XList, YList);
 
-        % % %%%%% Optional codes to measure more gridded measurement points %%%%%
-        % [DICpara,x0temp_f,y0temp_f,u_f,v_f,cc]= IntegerSearch(fNormalized,gNormalized,file_name,DICpara,ImgSeqNum);
-        % 
-        % xnodes = max([1+0.5*DICpara.winsize,DICpara.gridxyROIRange.gridx(1)])  ...
-        %     : DICpara.winstepsize : min([size(fNormalized,1)-0.5*DICpara.winsize-1,DICpara.gridxyROIRange.gridx(2)]);
-        % ynodes = max([1+0.5*DICpara.winsize,DICpara.gridxyROIRange.gridy(1)])  ...
-        %     : DICpara.winstepsize : min([size(fNormalized,2)-0.5*DICpara.winsize-1,DICpara.gridxyROIRange.gridy(2)]);
-        % 
-        % [x0temp,y0temp] = ndgrid(xnodes,ynodes);   u_f_NotNanInd = find(~isnan(u_f(:)));
-        % 
-        % op1 = rbfcreate( [x0temp_f(u_f_NotNanInd),y0temp_f(u_f_NotNanInd)]',[u_f(u_f_NotNanInd)]','RBFFunction', 'thinplate');
-        % rbfcheck_maxdiff = rbfcheck(op1); % Check: rbf thin-plate interpolation
-        % if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-        % u = rbfinterp([x0temp(:),y0temp(:)]', op1 );
-        % 
-        % op2 = rbfcreate( [x0temp_f(u_f_NotNanInd),y0temp_f(u_f_NotNanInd)]',[v_f(u_f_NotNanInd)]','RBFFunction', 'thinplate');
-        % rbfcheck_maxdiff = rbfcheck(op2); % Check: rbf thin-plate interpolation
-        % if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-        % v = rbfinterp([x0temp(:),y0temp(:)]', op2 );
-        % 
-        % u = regularizeNd([x0temp(:),y0temp(:)],u(:),{xnodes',ynodes'},1e-3);
-        % v = regularizeNd([x0temp(:),y0temp(:)],v(:),{xnodes',ynodes'},1e-3);
+            % Interpolate previous frame's displacement to current grid
+            prevNonNan = ~isnan(prevU_x);
+            Fi_u = scatteredInterpolant(prevCoords(prevNonNan,1), prevCoords(prevNonNan,2), ...
+                prevU_x(prevNonNan), 'natural', 'none');
+            Fi_v = scatteredInterpolant(prevCoords(prevNonNan,1), prevCoords(prevNonNan,2), ...
+                prevU_y(prevNonNan), 'natural', 'none');
+            u = reshape(Fi_u(x0temp(:), y0temp(:)), size(x0temp));
+            v = reshape(Fi_v(x0temp(:), y0temp(:)), size(x0temp));
+            u(isnan(u)) = 0; v(isnan(v)) = 0;  % Safe fallback for points outside convex hull
+            cc.max = ones(size(u));  % Dummy CC (not from FFT search)
+        end
+
 
         % ====== FEM mesh set up ======
         [DICmesh_nonQuadtree] = MeshSetUp(x0temp,y0temp,DICpara); clear x0temp y0temp;
@@ -111,7 +131,7 @@ for ImgSeqNum = 2 : imageNum
 
         % Zach Modified
         % Set zero at holes
-        linearIndices1 = sub2ind(size(fNormalizedMask), DICmesh_nonQuadtree.coordinatesFEM(:,1), DICmesh_nonQuadtree.coordinatesFEM(:,2));
+        linearIndices1 = sub2ind(size(fNormalizedMask), round(DICmesh_nonQuadtree.coordinatesFEM(:,1)), round(DICmesh_nonQuadtree.coordinatesFEM(:,2)));
         MaskOrNot1 = fNormalizedMask(linearIndices1);
 
         nanIndex = find(MaskOrNot1<1);
@@ -149,23 +169,9 @@ for ImgSeqNum = 2 : imageNum
             end
         end
 
-    else % imgSeqNum > ImgStartDataDrivenMode and NewFFT == 0 (For acc. mode.)
-        % switch camera0OrNot
-        % case 'camera0'
-        %     inv_U0 = RD.ResultDisp{ImgSeqNum-2}.U';
-        %     U0 = inv_U0(:);
-        %     U0(2*nanIndex) = 0;
-        %     U0(2*nanIndex-1) = 0;
-        % case 'notCamera0'
-        %     inv_U0 = RD.ResultDisp_corr{ImgSeqNum-2}.U';
-        %     U0 = inv_U0(:);
-        %     U0(2*nanIndex) = 0;
-        %     U0(2*nanIndex-1) = 0;
     end
 
-fprintf('------------ Section 3 Done ------------ \n \n')
-%% Section 4: ALDIC Subproblem 1 -or- Local ICGN Subset DIC
-fprintf('------------ Section 4 Start ------------ \n')
+% Section 4: Local ICGN
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % This section is to solve the first local step in ALDIC: Subproblem 1
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -173,87 +179,63 @@ fprintf('------------ Section 4 Start ------------ \n')
 % ====== ALStep 1 Subproblem1: Local Subset DIC ======
 mu=0; beta=0; tol=1e-2; ALSolveStep=1; ALSub1Time=zeros(6,1); ALSub2Time=zeros(6,1);
 ConvItPerEle=zeros(size(DICmesh_quadtree.coordinatesFEM,1),6); ALSub1BadPtNum=zeros(6,1);
-disp(['***** Start step',num2str(ALSolveStep),' Subproblem1 *****'])
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ------ Start Local DIC IC-GN iteration ------
 tic;
 [USubpb1,FSubpb1,HtempPar,ALSub1Timetemp,ConvItPerEletemp,LocalICGNBadPtNumtemp,markCoordHoleStrain] = ...
     LocalICGNQuadtree(U0,DICmesh_quadtree.coordinatesFEM,Df,fNormalized,gNormalized,DICpara,'GaussNewton',tol,shapeFuncOrder);
 ALSub1Time(ALSolveStep) = ALSub1Timetemp; ConvItPerEle(:,ALSolveStep) = ConvItPerEletemp; ALSub1BadPtNum(ALSolveStep) = LocalICGNBadPtNumtemp;
-fprintf('Local: %.4f s\n', toc);
 
-% % ====== Start: Zach-Optional: Thin-plate interpolate bad points =====
-% coordinatesFEM = DICmesh_quadtree.coordinatesFEM;
-% U = USubpb1; F = FSubpb1;
-% nanindexU = find(isnan(U(1:2:end))==1); notnanindex = setdiff([1:1:size(coordinatesFEM,1)],nanindexU);
-% %nanindexF = find(isnan(F(1:4:end))==1); notnanindexF = setdiff([1:1:size(coordinatesFEM,1)],nanindexF);
-% 
-% %%%%% Ux %%%%%%
-% % Zach's debug
-% % fi1 = rbfsplit([coordinatesFEM(notnanindex,1:2)],[U(2*notnanindex-1)],[coordinatesFEM(:,1:2)],2000,20);
-% 
-% op1 = rbfcreate( [coordinatesFEM(notnanindex,1:2)]',[U(2*notnanindex-1)]','RBFFunction', 'thinplate');
-% % rbfcheck_maxdiff = rbfcheck(op1); % check rbf interpolation
-% % if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-% fi1 = rbfinterp([coordinatesFEM(:,1:2)]', op1 );
-% 
-% %%%%% Uy %%%%%%
-% % Zach's debug
-% % fi2 = rbfsplit([coordinatesFEM(notnanindex,1:2)],[U(2*notnanindex)],[coordinatesFEM(:,1:2)],2000,20);
-% 
-% op2 = rbfcreate( [coordinatesFEM(notnanindex,1:2)]',[U(2*notnanindex)]','RBFFunction', 'thinplate');
-% % rbfcheck_maxdiff = rbfcheck(op2); % check rbf interpolation
-% % if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-% fi2 = rbfinterp([coordinatesFEM(:,1:2)]', op2 );
-% 
-% %%%%% Assemble [Ux, Uy] %%%%%
-% U_rbf_thinplate = [fi1(:),fi2(:)]';  U_rbf_thinplate = U_rbf_thinplate(:);
-% 
-% %%%%% F11 %%%%%
-% op =rbfcreate([coordinatesFEM(notnanindex,1:2)]', ...
-%     F(4*notnanindex-3)','RBFFunction', 'thinplate');
-% rbfcheck_maxdiff = rbfcheck(op);
-% if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-% fi11 = rbfinterp([coordinatesFEM(:,1:2)]', op );
-% 
-% %%%%% F21 %%%%%
-% op =rbfcreate([coordinatesFEM(notnanindex,1:2)]', ...
-%     F(4*notnanindex-2)','RBFFunction', 'thinplate');
-% rbfcheck_maxdiff = rbfcheck(op);
-% if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-% fi21 = rbfinterp([coordinatesFEM(:,1:2)]', op );
-% 
-% %%%%% F12 %%%%%
-% op =rbfcreate([coordinatesFEM(notnanindex,1:2)]', ...
-%     F(4*notnanindex-1)','RBFFunction', 'thinplate');
-% rbfcheck_maxdiff = rbfcheck(op);
-% if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-% fi12 = rbfinterp([coordinatesFEM(:,1:2)]', op );
-% 
-% %%%%% F22 %%%%%
-% op =rbfcreate([coordinatesFEM(notnanindex,1:2)]', ...
-%     F(4*notnanindex-0)','RBFFunction', 'thinplate');
-% rbfcheck_maxdiff = rbfcheck(op);
-% if rbfcheck_maxdiff > 1e-3, disp('Please check rbf interpolation! Pause here.'); pause; end
-% fi22 = rbfinterp([coordinatesFEM(:,1:2)]', op );
-% 
-% %%%%% Assemble [F11,F21,F12,F22] %%%%%
-% F_rbf_thinplate = [fi11(:),fi21(:),fi12(:),fi22(:)]';  F_rbf_thinplate = F_rbf_thinplate(:);
-% USubpb1 = U_rbf_thinplate;   % FSubpb1 = F_rbf_thinplate;
-% % ====== End: Zach-Optional: Thin-plate interpolate bad points =====
+%% Remove bad points
+coordinatesFEM = DICmesh_quadtree.coordinatesFEM;
+U = USubpb1; 
+F = FSubpb1;
+
+nanindexU = find(isnan(U(1:2:end))==1);
+notnanindex  = setdiff(1:size(coordinatesFEM,1), nanindexU);
+
+nanindexF = find(isnan(F(1:4:end))==1);
+notnanindexF = setdiff(1:size(coordinatesFEM,1), nanindexF);
+
+% ===== U interpolate (only if needed) =====
+if ~isempty(nanindexU) && numel(notnanindex) > 10
+    src_xy = coordinatesFEM(notnanindex, 1:2);
+    query_xy = coordinatesFEM(:, 1:2);
+    Fi_u = scatteredInterpolant(src_xy(:,1), src_xy(:,2), U(2*notnanindex-1), 'natural', 'none');
+    Fi_v = scatteredInterpolant(src_xy(:,1), src_xy(:,2), U(2*notnanindex),   'natural', 'none');
+    fi1 = Fi_u(query_xy(:,1), query_xy(:,2));
+    fi2 = Fi_v(query_xy(:,1), query_xy(:,2));
+    U_interp = [fi1(:), fi2(:)]';
+    USubpb1 = U_interp(:);
+end
+
+% ===== F interpolate (only if needed) =====
+if ~isempty(nanindexF) && numel(notnanindexF) > 10
+    src_xy = coordinatesFEM(notnanindexF, 1:2);
+    query_xy = coordinatesFEM(:, 1:2);
+    Fi_11 = scatteredInterpolant(src_xy(:,1), src_xy(:,2), F(4*notnanindexF-3), 'natural', 'none');
+    Fi_21 = scatteredInterpolant(src_xy(:,1), src_xy(:,2), F(4*notnanindexF-2), 'natural', 'none');
+    Fi_12 = scatteredInterpolant(src_xy(:,1), src_xy(:,2), F(4*notnanindexF-1), 'natural', 'none');
+    Fi_22 = scatteredInterpolant(src_xy(:,1), src_xy(:,2), F(4*notnanindexF-0), 'natural', 'none');
+    fi11 = Fi_11(query_xy(:,1), query_xy(:,2));
+    fi21 = Fi_21(query_xy(:,1), query_xy(:,2));
+    fi12 = Fi_12(query_xy(:,1), query_xy(:,2));
+    fi22 = Fi_22(query_xy(:,1), query_xy(:,2));
+    F_interp = [fi11(:), fi21(:), fi12(:), fi22(:)]';
+    FSubpb1 = F_interp(:);
+end
+
+% sanity (silent unless NaN remain)
+nNanU = nnz(isnan(USubpb1)); nNanF = nnz(isnan(FSubpb1));
+if nNanU > 0 || nNanF > 0, fprintf('  Post-interp NaN: U=%d, F=%d\n', nNanU, nNanF); end
 
 
 
-% ------ Plot ------
-USubpb1World = USubpb1; USubpb1World(2:2:end) = -USubpb1(2:2:end); % FSubpb1World = FSubpb1;
-% Plotdisp_show(USubpb1World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
-% Plotstrain_show(FSubpb1World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
-save(['Subpb1_step',num2str(ALSolveStep)],'USubpb1','FSubpb1');
-fprintf('------------ Section 4 Done ------------ \n \n')
+% Section 4 done
 
 
 if UseGlobal
-    fprintf('------------ Section 5 Start ------------ \n'); tic;
+    tic; % Section 5: Global constraint
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % This section is to solve the global step in ALDIC Subproblem 2
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -266,17 +248,17 @@ if UseGlobal
     % if DICpara.StrainSmoothness>1e-6, FSubpb1 = funSmoothStrainQuadtree(FSubpb1,DICmesh_quadtree,DICpara); end
 
     % ====== Define penalty parameter ======
-    mu = 1e-3; udual = 0*FSubpb1; vdual = 0*USubpb1;
+    mu = 1e-3; udual = zeros(size(FSubpb1)); vdual = zeros(size(USubpb1));
     betaList = [1e-3,1e-2,1e-1]*mean(DICpara.winstepsize).^2.*mu; % Tune beta in the betaList
     Err1 = zeros(length(betaList),1); Err2 = Err1;
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    disp(['***** Start step',num2str(ALSolveStep),' Subproblem2 *****']);
+    % Subproblem2 step
     DICpara.GaussPtOrder = 2; alpha = 0;  % No regularization added
     % ====== Solver using finite element method ======
     if ImgSeqNum == 2
         for tempk = 1:length(betaList)
-            beta = betaList(tempk); display(['Try #',num2str(tempk),' beta = ',num2str(beta)]);
+            beta = betaList(tempk);
             GaussPtOrder=3; alpha=0; 
             [USubpb2] = Subpb2Quadtree(DICmesh_quadtree,DICpara.GaussPtOrder,beta,mu,USubpb1,FSubpb1,udual,vdual,alpha,mean(DICpara.winstepsize),0);
             % [FSubpb2,~,~] = funGlobalNodalStrainQuadtree(DICmesh_quadtree,USubpb2,DICpara.GaussPtOrder,0);
@@ -295,7 +277,7 @@ if UseGlobal
             p = coeffvalues(fitobj); beta = 10^(-p(2)/2/p(1));
         catch, beta = betaList(indexOfbeta);
         end
-        display(['Best beta = ',num2str(beta)]);
+        fprintf('  beta=%.2e\n', beta);
     else
         try beta = DICpara.beta;
         catch, beta = 1e-3*mean(DICpara.winstepsize).^2.*mu;
@@ -320,22 +302,14 @@ if UseGlobal
 
     % ------- Save data ------
     FSubpb2 = FSubpb1;
-    save(['Subpb2_step',num2str(ALSolveStep)],'USubpb2','FSubpb2');
-
-    % ------ Plot ------
-    USubpb2World = USubpb2; USubpb2World(2:2:end) = -USubpb2(2:2:end); % FSubpb2World = FSubpb2;
-    close all; Plotdisp_show(USubpb2World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
-    % Plotstrain_show(FSubpb2World,DICmesh.coordinatesFEMWorld,DICmesh.elementsFEM(:,1:4),DICpara,'EdgeColor');
 
     % ======= Update dual variables =======
     udual = FSubpb2 - FSubpb1; vdual = USubpb2 - USubpb1;
-    save(['uvdual_step',num2str(ALSolveStep)],'udual','vdual');
-    fprintf('------------ Section 5 Done ------------ \n \n')
 
 
     %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %% Section 6: ADMM iterations
-    fprintf('------------ Section 6 Start ------------ \n')
+    % Section 6: ADMM iterations
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % This section is the ADMM iteration, where both Subproblems 1 & 2 are solved iteratively.
     % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -343,100 +317,60 @@ if UseGlobal
     % ==================== ADMM AL Loop ==========================
     ALSolveStep = 1; tol2 = 1e-2; UpdateY = 1e4;
     HPar = cell(21,1); for tempj = 1:21, HPar{tempj} = HtempPar(:,tempj); end
+    USubpb1_prev = USubpb1; USubpb2_prev = USubpb2;  % In-memory convergence tracking
 
     while (ALSolveStep < 3)
         ALSolveStep = ALSolveStep + 1;  % Update using the last step
 
-        %%%%%%%% These lines can be used to further update each DIC subset window size %%%%%%%
-        % Ftemp1 = FSubpb2(1:2:end); Ftemp2 = FSubpb2(2:2:end);
-        % [DFtemp1,~,~] = funGlobalNodalStrainQuadtree(DICmesh,Ftemp1,DICpara.GaussPtOrder,0);
-        % [DFtemp2,~,~] = funGlobalNodalStrainQuadtree(DICmesh,Ftemp2,DICpara.GaussPtOrder,0);
-        %
-        % winsize_x_ub1 = abs(2*FSubpb2(1:4:end)./DFtemp1(1:4:end)); winsize_x_ub2 = abs(2*FSubpb2(3:4:end)./DFtemp1(3:4:end));
-        % winsize_y_ub1 = abs(2*FSubpb2(1:4:end)./DFtemp1(2:4:end)); winsize_y_ub2 = abs(2*FSubpb2(3:4:end)./DFtemp1(4:4:end));
-        % winsize_x_ub3 = abs(2*FSubpb2(2:4:end)./DFtemp2(1:4:end)); winsize_x_ub4 = abs(2*FSubpb2(4:4:end)./DFtemp2(3:4:end));
-        % winsize_y_ub3 = abs(2*FSubpb2(2:4:end)./DFtemp2(2:4:end)); winsize_y_ub4 = abs(2*FSubpb2(4:4:end)./DFtemp2(4:4:end));
-        %
-        % winsize_x_ub = round(min([winsize_x_ub1,winsize_x_ub2,winsize_x_ub3,winsize_x_ub4,DICpara.winsize*ones(length(winsize_x_ub1),1)],[],2));
-        % winsize_x_List = max([winsize_x_ub, 10*ones(length(winsize_x_ub1),1)],[],2);
-        % winsize_y_ub = round(min([winsize_y_ub1,winsize_y_ub2,winsize_y_ub3,winsize_y_ub4,DICpara.winsize*ones(length(winsize_y_ub1),1)],[],2));
-        % winsize_y_List = max([winsize_y_ub, 10*ones(length(winsize_y_ub1),1)],[],2);
-        % winsize_List = 2*ceil([winsize_x_List,winsize_y_List]/2);
+        % Uniform winsize across mesh (adaptive per-node winsize not used).
         winsize_List = DICpara.winsize*ones(size(DICmesh_quadtree.coordinatesFEM,1),2);
         DICpara.winsize_List = winsize_List;
 
-
-        %%%%%%%%%%%%%%%%%%%%%%% Subproblem 1 %%%%%%%%%%%%%%%%%%%%%%%%%
-        disp(['***** Start step',num2str(ALSolveStep),' Subproblem1 *****']);
+        % ====== Subproblem 1 (local ICGN) ======
         tic; [USubpb1,~,ALSub1Timetemp,ConvItPerEletemp,LocalICGNBadPtNumtemp] = Subpb1Quadtree(...
             USubpb2,FSubpb2,udual,vdual,DICmesh_quadtree.coordinatesFEM,...
             Df,fNormalized,gNormalized,mu,beta,HPar,ALSolveStep,DICpara,'GaussNewton',tol);
-        % FSubpb1 = FSubpb2; toc
-        % for tempk=0:1, USubpb1(2*markCoordHoleStrain-tempk) = USubpb2(2*markCoordHoleStrain-tempk); end
         ALSub1Time(ALSolveStep) = ALSub1Timetemp; ConvItPerEle(:,ALSolveStep) = ConvItPerEletemp; ALSub1BadPtNum(ALSolveStep) = LocalICGNBadPtNumtemp;
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % ------  Manually find some bad points from Local Subset ICGN step ------
-        % disp('--- Start to manually remove bad points --- \n')
-        % disp('    Comment codes here if you do not have bad local points \n')
-        % %%%%% Comment START %%%%%
-        %  [USubpb1,FSubpb1] = funRemoveOutliersQuadtree(DICmesh,DICpara,USubpb1,FSubpb1);
-        %  disp('--- Remove bad points done ---')
-        % %%%%% Comment END %%%%%
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        save(['Subpb1_step',num2str(ALSolveStep)],'USubpb1','FSubpb1');
 
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % ============== Subproblem 2 ==============
-        disp(['***** Start step',num2str(ALSolveStep),' Subproblem2 *****'])
+        % ====== Subproblem 2 (global FEM) ======
         tic; [USubpb2] = Subpb2Quadtree(DICmesh_quadtree,DICpara.GaussPtOrder,beta,mu,USubpb1,FSubpb1,udual,vdual,alpha,mean(DICpara.winstepsize),0);
-        % [FSubpb2,~,~] = funGlobalNodalStrainQuadtree(DICmesh_quadtree,USubpb2,DICpara.GaussPtOrder,0);
-        ALSub2Time(ALSolveStep) = toc; toc
+        ALSub2Time(ALSolveStep) = toc;
 
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % ------- Smooth strain field --------
+        % ------- Optional smoothing --------
         if DICpara.DispSmoothness>1e-6, USubpb2 = funSmoothDispQuadtree(USubpb2,DICmesh_quadtree,DICpara); end
-        % ------- Don't change strain fields near the boundary --------
-        %for tempk=0:3, FSubpb2(4*DICmesh_quadtree.markCoordHoleEdge-tempk) = FSubpb1(4*DICmesh_quadtree.markCoordHoleEdge-tempk); end
-        %if DICpara.StrainSmoothness>1e-6, FSubpb2 = funSmoothStrainQuadtree(0.1*FSubpb2+0.9*FSubpb1,DICmesh_quadtree,DICpara); end
+        % Preserve hole-edge displacements from Subpb1 (no global blur)
         for tempk=0:1, USubpb2(2*markCoordHoleStrain-tempk) = USubpb1(2*markCoordHoleStrain-tempk); end
-        %for tempk=0:3, FSubpb2(4*markCoordHoleStrain-tempk) = FSubpb1(4*markCoordHoleStrain-tempk); end
-
-        save(['Subpb2_step',num2str(ALSolveStep)],'USubpb2','FSubpb2');
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Compute norm of UpdateY
-        USubpb2_Old = load(['Subpb2_step',num2str(ALSolveStep-1)],'USubpb2');
-        USubpb2_New = load(['Subpb2_step',num2str(ALSolveStep)],'USubpb2');
-        USubpb1_Old = load(['Subpb1_step',num2str(ALSolveStep-1)],'USubpb1');
-        USubpb1_New = load(['Subpb1_step',num2str(ALSolveStep)],'USubpb1');
+        % Compute norm of UpdateY (in-memory, no file I/O)
         if (mod(ImgSeqNum-2,DICpara.ImgSeqIncUnit) ~= 0 && (ImgSeqNum>2)) || (ImgSeqNum < DICpara.ImgSeqIncUnit)
-            UpdateY = norm((USubpb2_Old.USubpb2 - USubpb2_New.USubpb2), 2)/sqrt(size(USubpb2_Old.USubpb2,1));
+            UpdateY = norm((USubpb2_prev - USubpb2), 2)/sqrt(size(USubpb2_prev,1));
             try
-                UpdateY2 = norm((USubpb1_Old.USubpb1 - USubpb1_New.USubpb1), 2)/sqrt(size(USubpb1_Old.USubpb1,1));
-            catch
+                UpdateY2 = norm((USubpb1_prev - USubpb1), 2)/sqrt(size(USubpb1_prev,1));
+            catch ME
+                warning('%s: %s', ME.identifier, ME.message);
             end
         end
+        USubpb1_prev = USubpb1; USubpb2_prev = USubpb2;
         try
-            disp(['Update local step  = ',num2str(UpdateY2)]);
-            disp(['Update global step = ',num2str(UpdateY)]);
+            fprintf('  ADMM step%d: local=%.2e, global=%.2e\n', ALSolveStep, UpdateY2, UpdateY);
         catch
         end
-        fprintf('*********************************** \n \n');
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Update dual variables------------------------------
         udual = FSubpb2 - FSubpb1; vdual = USubpb2 - USubpb1;
 
-        save(['uvdual_step',num2str(ALSolveStep)],'udual','vdual');
         try
             if UpdateY < tol2 || UpdateY2 < tol2
                 break
             end
-        catch
+        catch ME
+            warning('%s: %s', ME.identifier, ME.message);
         end
 
     end
-    fprintf('------------ Section 6 Done ------------ \n \n')
+    % Section 6 done
 end
 
 switch incOrNot
@@ -465,11 +399,12 @@ switch incOrNot
                 % tempResultDisp(:,1) = rbfsplit(RD.ResultFEMeshEachFrame{1, 1}.coordinatesFEM,tempX,RD.Coordinates_corr,2000,20);
                 % tempResultDisp(:,2) = rbfsplit(RD.ResultFEMeshEachFrame{1, 1}.coordinatesFEM,tempY,RD.Coordinates_corr,2000,20);
 
-                rbfInterpX = rbfcreate(RD.ResultFEMeshEachFrame{1, 1}.coordinatesFEM',tempX');
-                rbfInterpY = rbfcreate(RD.ResultFEMeshEachFrame{1, 1}.coordinatesFEM',tempY');
-
-                tempResultDisp(:,1) = rbfinterp(RD.Coordinates_corr',rbfInterpX);
-                tempResultDisp(:,2) = rbfinterp(RD.Coordinates_corr',rbfInterpY);
+                src_coords = RD.ResultFEMeshEachFrame{1, 1}.coordinatesFEM;
+                query_coords = RD.Coordinates_corr;
+                Fi_X = scatteredInterpolant(src_coords(:,1), src_coords(:,2), tempX, 'natural', 'none');
+                Fi_Y = scatteredInterpolant(src_coords(:,1), src_coords(:,2), tempY, 'natural', 'none');
+                tempResultDisp(:,1) = Fi_X(query_coords(:,1), query_coords(:,2));
+                tempResultDisp(:,2) = Fi_Y(query_coords(:,1), query_coords(:,2));
 
                 % Based on Left first frame
                 RD.ResultDisp{ImgSeqNum-1,1}.U = tempResultDisp;
@@ -505,11 +440,13 @@ switch incOrNot
                     % tempResultDisp(:,1) = rbfsplit(RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM,tempX,RD.ResultFEMeshEachFrame{1,1}.coordinatesFEM,2000,20);
                     % tempResultDisp(:,2) = rbfsplit(RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM,tempY,RD.ResultFEMeshEachFrame{1,1}.coordinatesFEM,2000,20);
                     %
-                    rbfInterpX = rbfcreate(RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM',tempX');
-                    rbfInterpY = rbfcreate(RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM',tempY');
-
-                    tempResultDisp(1,:) = rbfinterp(RD.ResultFEMeshEachFrame{1,1}.coordinatesFEM',rbfInterpX);
-                    tempResultDisp(2,:) = rbfinterp(RD.ResultFEMeshEachFrame{1,1}.coordinatesFEM',rbfInterpY);
+                    src_coords = RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM;
+                    Fi_X = scatteredInterpolant(src_coords(:,1), src_coords(:,2), tempX, 'natural', 'none');
+                    Fi_Y = scatteredInterpolant(src_coords(:,1), src_coords(:,2), tempY, 'natural', 'none');
+                    % FIX: Evaluate at DEFORMED positions (Lagrangian tracking)
+                    deformed_pos_L = RD.ResultFEMeshEachFrame{1,1}.coordinatesFEM + RD.ResultDisp{ImgSeqNum-2,1}.U;
+                    tempResultDisp(1,:) = Fi_X(deformed_pos_L(:,1), deformed_pos_L(:,2))';
+                    tempResultDisp(2,:) = Fi_Y(deformed_pos_L(:,1), deformed_pos_L(:,2))';
                     RD.ResultDisp{ImgSeqNum-1,1}.U = RD.ResultDisp{ImgSeqNum-2,1}.U  + tempResultDisp'; % disp_inc 是相较于最初第一张ROI的位移
                 end
             case 'notCamera0'
@@ -519,56 +456,37 @@ switch incOrNot
                 % tempResultDisp(:,1) = rbfsplit(RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM,tempX,RD.Coordinates_corr,min(2000,size(tempY,1)),20);
                 % tempResultDisp(:,2) = rbfsplit(RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM,tempY,RD.Coordinates_corr,min(2000,size(tempY,1)),20);
                 % % toc;
-                rbfInterpX = rbfcreate(RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM',tempX');
-                rbfInterpY = rbfcreate(RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM',tempY');
-
-                tempResultDisp(:,1) = rbfinterp(RD.Coordinates_corr',rbfInterpX);
-                tempResultDisp(:,2) = rbfinterp(RD.Coordinates_corr',rbfInterpY);
+                src_coords = RD.ResultFEMeshEachFrame{ImgSeqNum-1, 1}.coordinatesFEM;
+                Fi_X = scatteredInterpolant(src_coords(:,1), src_coords(:,2), tempX, 'natural', 'none');
+                Fi_Y = scatteredInterpolant(src_coords(:,1), src_coords(:,2), tempY, 'natural', 'none');
 
                 if ImgSeqNum == 2
-                    RD.ResultDisp{ImgSeqNum-1,1}.U = tempResultDisp; % disp_inc 是相较于最初第一张ROI的位移
+                    tempResultDisp(:,1) = Fi_X(RD.Coordinates_corr(:,1), RD.Coordinates_corr(:,2));
+                    tempResultDisp(:,2) = Fi_Y(RD.Coordinates_corr(:,1), RD.Coordinates_corr(:,2));
+                    RD.ResultDisp{ImgSeqNum-1,1}.U = tempResultDisp; % disp_inc relative to first frame
                 else
-                    RD.ResultDisp{ImgSeqNum-1,1}.U = RD.ResultDisp{ImgSeqNum-2,1}.U  + tempResultDisp; % disp_inc 是相较于最初第一张ROI的位移
+                    % FIX: Evaluate at DEFORMED positions (Lagrangian tracking)
+                    deformed_pos_R = RD.Coordinates_corr + RD.ResultDisp{ImgSeqNum-2,1}.U;
+                    tempResultDisp(:,1) = Fi_X(deformed_pos_R(:,1), deformed_pos_R(:,2));
+                    tempResultDisp(:,2) = Fi_Y(deformed_pos_R(:,1), deformed_pos_R(:,2));
+                    RD.ResultDisp{ImgSeqNum-1,1}.U = RD.ResultDisp{ImgSeqNum-2,1}.U + tempResultDisp; % accumulated disp
                 end
 
         end
 end
 
 if DICpara.showImgOrNot
-    % ------ Plot ------
-    % if DICpara.DICIncOrNot == 1
-    % U_inc = reshape(RD.ResultDisp_inc{ImgSeqNum,1}.',[],1);
-    % close all; Plotuv(U_inc,DICmesh_init.x0,DICmesh_init.y0World);
-    % Plotdisp_show(U_inc,DICmesh_init.coordinatesFEMWorld,DICmesh_init.elementsFEM);
-    % else
-
     if UseGlobal
-        USubpb2World = USubpb2; USubpb2World(2:2:end) = -USubpb2(2:2:end);
-        FSubpb2World = FSubpb2; FSubpb2World(2:4:end) = -FSubpb2World(2:4:end); FSubpb2World(3:4:end) = -FSubpb2World(3:4:end);
-        close all; % plotuv(USubpb2World,DICmesh_quadtree.x0,DICmesh_quadtree.y0World);
-        Plotdisp_show(USubpb2World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM);
-        Plotdisp_show(USubpb1World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
+        UDispWorld = USubpb2; UDispWorld(2:2:end) = -USubpb2(2:2:end);
     else
-        USubpb2World = USubpb1; USubpb2World(2:2:end) = -USubpb1(2:2:end);
-        FSubpb2World = FSubpb1; FSubpb2World(2:4:end) = -FSubpb2World(2:4:end); FSubpb2World(3:4:end) = -FSubpb2World(3:4:end);
-        close all; % plotuv(USubpb2World,DICmesh_quadtree.x0,DICmesh_quadtree.y0World);
-        Plotdisp_show(USubpb2World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM);
-        Plotdisp_show(USubpb1World,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
+        UDispWorld = USubpb1; UDispWorld(2:2:end) = -USubpb1(2:2:end);
     end
-    
-    % end
-else
+    close all;
+    Plotdisp_show(UDispWorld,DICmesh_quadtree.coordinatesFEMWorld,DICmesh_quadtree.elementsFEM(:,1:4),DICpara,'EdgeColor');
 end
 
-
-% ------ Save results ------
-% Find img name and save all the results
-
-% [~,imgname,imgext] = fileparts(file_name{1,end});
-% results_name = ['results_',imgname,'_ws',num2str(DICpara.winsize),'_st',num2str(DICpara.winstepsize),'.mat'];
-% save(results_name, 'file_name','DICpara','DICmesh','RD','ALSub1Time','ALSub2Time','ALSolveStep');
-end
-end
+end  % for ImgSeqNum
+end  % function
 
 
 
