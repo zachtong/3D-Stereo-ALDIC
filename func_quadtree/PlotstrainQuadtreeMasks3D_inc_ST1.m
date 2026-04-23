@@ -13,59 +13,49 @@ end
 
 OrigDICImgTransparency = DICpara.OrigDICImgTransparency; % Original raw DIC image transparency
 
-%% Compute strain components
-% Strain_tensor = 0.5* (F'*F - I)
-strain_exx = zeros(size(coefficients,1),1);
-strain_exy = zeros(size(coefficients,1),1);
-strain_eyy = zeros(size(coefficients,1),1);
-dwdx = zeros(size(coefficients,1),1);
-dwdy = zeros(size(coefficients,1),1);
-for i = 1:size(coefficients,1)
-    u_x = coefficients{i,1}(1,1); u_y = coefficients{i,1}(2,1); u_z = coefficients{i,1}(3,1);
-    v_x = coefficients{i,1}(1,2); v_y = coefficients{i,1}(2,2); v_z = coefficients{i,1}(3,2);
-    w_x = coefficients{i,1}(1,3); w_y = coefficients{i,1}(2,3); w_z = coefficients{i,1}(3,3);
-    F = [1+u_x, u_y, u_z; v_x, 1+v_y, v_z; w_x, w_y, 1+w_z];
-    temp_Strain_tensor = 0.5*(F'*F-eye(3));
-    strain_exx(i) = temp_Strain_tensor(1,1);
-    strain_exy(i) = temp_Strain_tensor(1,2);
-    strain_eyy(i) = temp_Strain_tensor(2,2);
-    dwdx(i) = w_x;
-    dwdy(i) = w_y;
-end
+%% Compute strain components (extracted to computeStrain3D helper)
+[strain_exx, strain_eyy, strain_exy, strain_principal_max, strain_principal_min, ...
+ strain_maxshear, strain_vonMises, dwdx, dwdy] = computeStrain3D(coefficients);
 
 %% Plot on deformed images or Not
 if DICpara.Image2PlotResults == 1
-    coordinatesFEMWorldDef = [CurrentFEM.coordinatesFEM(:,1)+U_2D_L_inc(1:2:end), CurrentFEM.coordinatesFEM(:,2)+U_2D_L_inc(2:2:end)];
+    % Q6=b: CurrentFEM.coordinatesFEM is already in current-frame image space
+    % (the mesh was generated on this frame's mask), so it's the correct
+    % plot location. No need to add U_2D_L_inc again.
+    coordinatesFEMWorldDef = CurrentFEM.coordinatesFEM;
     elementsFEM = CurrentFEM.elementsFEM;
     Img = CurrentImg;
 
-    % Exclude void region whose strain_e.. are zero! They are no need to be
-    % used to create interpolant.
-    Coor_temp = FirstFEM.coordinatesFEM'+U_2D_L';
-    UsedCoor_temp = Coor_temp(:,~voidIndex);
+    % Interpolate strains from FirstFEM node "deformed" positions onto
+    % CurrentFEM nodes (both are in current-frame image space).
+    % C3.3: scatteredInterpolant('natural') replaces the old RBF thinplate
+    % which was O(N^2) memory and 10-100x slower.
+    src  = FirstFEM.coordinatesFEM + U_2D_L;  % deformed frame-1 node positions
+    keep = ~voidIndex;
+    Fi = @(v) scatteredInterpolant(src(keep,1), src(keep,2), v(keep), 'natural', 'none');
+    Fi_exx = Fi(strain_exx); Fi_eyy = Fi(strain_eyy); Fi_exy = Fi(strain_exy);
+    Fi_dwx = Fi(dwdx);       Fi_dwy = Fi(dwdy);
 
-    op3 = rbfcreate(UsedCoor_temp,strain_exx(~voidIndex)','RBFFunction','thinplate');
-    strain_exx = rbfinterp(CurrentFEM.coordinatesFEM',op3)';
-    op4 = rbfcreate(UsedCoor_temp,strain_exy(~voidIndex)','RBFFunction','thinplate');
-    strain_exy = rbfinterp(CurrentFEM.coordinatesFEM',op4)';
-    op5 = rbfcreate(UsedCoor_temp,strain_eyy(~voidIndex)','RBFFunction','thinplate');
-    strain_eyy = rbfinterp(CurrentFEM.coordinatesFEM',op5)';
-    op6 = rbfcreate(UsedCoor_temp,dwdx(~voidIndex)','RBFFunction','thinplate');
-    dwdx = rbfinterp(CurrentFEM.coordinatesFEM',op6)';
-    op7 = rbfcreate(UsedCoor_temp,dwdy(~voidIndex)','RBFFunction','thinplate');
-    dwdy = rbfinterp(CurrentFEM.coordinatesFEM',op7)';
+    q_x = CurrentFEM.coordinatesFEM(:,1);
+    q_y = CurrentFEM.coordinatesFEM(:,2);
+    strain_exx = Fi_exx(q_x, q_y);
+    strain_eyy = Fi_eyy(q_x, q_y);
+    strain_exy = Fi_exy(q_x, q_y);
+    dwdx       = Fi_dwx(q_x, q_y);
+    dwdy       = Fi_dwy(q_x, q_y);
+
+    % Re-derive principal / shear / vonMises from the interpolated base
+    % strains (the ones from computeStrain3D were on FirstFEM nodes).
+    strain_maxshear      = sqrt((0.5*(strain_exx - strain_eyy)).^2 + strain_exy.^2);
+    strain_principal_max = 0.5*(strain_exx + strain_eyy) + strain_maxshear;
+    strain_principal_min = 0.5*(strain_exx + strain_eyy) - strain_maxshear;
+    strain_vonMises      = sqrt(strain_principal_max.^2 + strain_principal_min.^2 - ...
+        strain_principal_max.*strain_principal_min + 3*strain_maxshear.^2);
 else
     coordinatesFEMWorldDef = [FirstFEM.coordinatesFEM(:,1), FirstFEM.coordinatesFEM(:,2)];
     elementsFEM = FirstFEM.elementsFEM;
     Img = FirstImg;
 end
-
-strain_maxshear = sqrt((0.5*(strain_exx-strain_eyy)).^2 + strain_exy.^2);
-strain_principal_max = 0.5*(strain_exx+strain_eyy) + strain_maxshear;
-strain_principal_min = 0.5*(strain_exx+strain_eyy) - strain_maxshear;
-strain_vonMises = sqrt(strain_principal_max.^2 + strain_principal_min.^2 - ...
-             strain_principal_max.*strain_principal_min + 3*strain_maxshear.^2);
-
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ====== Selective Plotting ======

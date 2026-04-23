@@ -9,24 +9,9 @@ catch um2px = 1;
 end
 OrigDICImgTransparency = DICpara.OrigDICImgTransparency;
 
-% (Strain calculation code is exactly the same as before...)
-strain_exx = zeros(size(coefficients,1),1);
-strain_exy = zeros(size(coefficients,1),1);
-strain_eyy = zeros(size(coefficients,1),1);
-dwdx = zeros(size(coefficients,1),1);
-dwdy = zeros(size(coefficients,1),1);
-for i = 1:size(coefficients,1)
-    u_x = coefficients{i,1}(1,1); u_y = coefficients{i,1}(2,1);
-    v_x = coefficients{i,1}(1,2); v_y = coefficients{i,1}(2,2);
-    w_x = coefficients{i,1}(1,3); w_y = coefficients{i,1}(2,3);
-    F = [1+u_x, u_y, 0; v_x, 1+v_y, 0; w_x, w_y, 1];
-    temp_Strain_tensor = 0.5*(F'*F-eye(3));
-    strain_exx(i) = temp_Strain_tensor(1,1);
-    strain_exy(i) = temp_Strain_tensor(1,2);
-    strain_eyy(i) = temp_Strain_tensor(2,2);
-    dwdx(i) = w_x;
-    dwdy(i) = w_y;
-end
+% Compute strain components (extracted to computeStrain3D helper)
+[strain_exx, strain_eyy, strain_exy, strain_principal_max, strain_principal_min, ...
+ strain_maxshear, strain_vonMises, dwdx, dwdy] = computeStrain3D(coefficients);
 
 % (Image and coordinate setup is the same...)
 if DICpara.Image2PlotResults == 1
@@ -38,14 +23,6 @@ else
     elementsFEM = FirstFEM.elementsFEM;
     Img = FirstImg;
 end
-
-% (Derived strain calculation is the same...)
-strain_maxshear = sqrt((0.5*(strain_exx-strain_eyy)).^2 + strain_exy.^2);
-strain_principal_max = 0.5*(strain_exx+strain_eyy) + strain_maxshear;
-strain_principal_min = 0.5*(strain_exx+strain_eyy) - strain_maxshear;
-strain_vonMises = sqrt(strain_principal_max.^2 + strain_principal_min.^2 - ...
-             strain_principal_max.*strain_principal_min + 3*strain_maxshear.^2);
-
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ====== Selective Plotting ======
