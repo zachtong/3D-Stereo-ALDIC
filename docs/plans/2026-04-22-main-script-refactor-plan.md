@@ -1,917 +1,338 @@
-# Main Script Refactor + Git Hygiene — Implementation Plan
+# Stereo-ALDIC Refactor — Implementation Plan (v2)
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans.
 
-**Goal:** Clean up `main_3D_ALDIC.m` (404 → ~250 lines) and prevent private research files from entering git.
+**Goal:** Execute the 8 workstreams from `docs/plans/2026-04-22-main-script-refactor-design.md`.
 
-**Architecture:** Two independent workstreams. **E** (git hygiene) is a 3-task sequential flow that happens first and is isolated. **C** (main-script refactor) has 14 independent sub-tasks grouped as C1 (cleanup, no behavior change) then C2 (user convenience). Each task touches only `main_3D_ALDIC.m` and at most one new helper file under `func/`. No modifications to the existing `func/` or `func_quadtree/` core algorithm files.
+**Supersedes:** v1 plan at `2026-04-22-main-script-refactor-plan.md` (superseded by this v2).
 
-**Tech Stack:** MATLAB R2024+; git; `checkcode` for static linting.
+**Architecture:** Each workstream is a sequence of small, independently-committable tasks. After each workstream, user runs `tests/run_pipeline_test.m` in MATLAB; if it passes, proceed to next workstream.
 
-**Design reference:** `docs/plans/2026-04-22-main-script-refactor-design.md`
-
-**Validation strategy:** MATLAB research codebase — no pytest-style TDD. Per-task verification uses:
-1. `checkcode` on the modified file (must not introduce new warnings).
-2. MATLAB parse (`matlab -batch "p = mtree('main_3D_ALDIC.m'); assert(~isempty(p))"`) as a cheap syntax check.
-3. **Before starting**: user runs `main_3D_ALDIC.m` on `examples/Stereo_DIC_Challenge_1.0_S3/` once, saves `FinalResult` as `baseline_before.mat` (optional but recommended).
-4. **After finishing**: user re-runs same flow, saves as `baseline_after.mat`, diffs key fields.
+**Validation gate after every workstream:** user runs test; if baseline diff > tolerance, roll back and debug.
 
 ---
 
-## Pre-flight: Create baseline (optional, recommended)
+## Execution order
 
-**Why:** Most class-1 changes are pure text cleanup and should be bit-identical. If you want proof, capture output before any edit.
-
-**Steps:**
-1. In MATLAB, run `main_3D_ALDIC` once on `examples/Stereo_DIC_Challenge_1.0_S3/`. Accept defaults.
-2. After completion: `save('baseline_before.mat', 'FinalResult', 'DICpara', 'RD_L', '-v7.3')`
-3. After all tasks complete, re-run and `save('baseline_after.mat', 'FinalResult', 'DICpara', 'RD_L', '-v7.3')`
-4. Diff:
-```matlab
-a = load('baseline_before.mat'); b = load('baseline_after.mat');
-assert(isequal(size(a.FinalResult.Coordinates), size(b.FinalResult.Coordinates)), 'coord size mismatch');
-for i = 1:numel(a.FinalResult.Displacement)
-    d = max(abs(a.FinalResult.Displacement{i}(:) - b.FinalResult.Displacement{i}(:)), [], 'omitnan');
-    assert(d < 1e-10, sprintf('frame %d displacement diff: %.2e', i, d));
-end
-fprintf('PASS: outputs bit-identical\n');
-```
-
-If you skip this, proceed — `checkcode` + manual visual review will catch the important issues.
+1. **T** Test (already written, user captures baseline first)
+2. **E** Git hygiene (3 tasks)
+3. **C6** Defaults + validation (2 tasks) — needed by C2/C4
+4. **C1** Cleanup (cluster into 5 commits)
+5. **C5** Smoothing params (2 tasks)
+6. **C2** User convenience (5 tasks)
+7. **C4** Light GUI guard (1 task)
+8. **C3** Architectural (5 tasks)
 
 ---
 
-## Workstream E: Git Hygiene
+## T — Test script
 
-### Task E1: Extend `.gitignore`
+**Status:** ✅ Written as `tests/run_pipeline_test.m` (commit `f740bb2`).
 
-**Files:**
-- Modify: `.gitignore`
-
-**Step 1: Read current `.gitignore`**
-
-Run: `cat .gitignore`
-
-**Step 2: Append the private-file patterns**
-
-Append to `.gitignore`:
-```gitignore
-
-# Private research / personal work
-Stereo_DIC_Challenge_2.1_Bespoke/
-challenge_scripts/
-run_coarse_test*.m
-run_export_*.m
-validate_csv_output.m
-view_csv_gui.py
-benchmark_single_frame.m
-coarse_test_*.mat
-results/
-docs/plans/2026-04-16-csv-export-pipeline.md
-CLAUDE.md
-
-# Python / editor artifacts
-__pycache__/
-*.pyc
-.claude/
+**User action required NOW before proceeding:**
 ```
-
-**Step 3: Verify ignore patterns work**
-
-Run: `git status --short | wc -l` before and after. Expected: significantly fewer untracked files shown.
-
-Then: `git check-ignore -v run_export_csv.m CLAUDE.md Stereo_DIC_Challenge_2.1_Bespoke` — should report match for each.
-
-**Step 4: Commit**
-
-```bash
-git add .gitignore
-git -c commit.gpgsign=false commit -m "chore: gitignore private research and personal files"
+cd tests
+run_pipeline_test
 ```
+On first run, this captures `tests/baseline/baseline.mat`. Report success or any errors back.
 
 ---
 
-### Task E2: Un-track already-committed private files
+## E — Git hygiene (3 commits)
 
-**Files:**
-- Remove from git index (keep on disk):
-  - `run_coarse_test_noise.m`
-  - `run_export_csv.m`
-  - `validate_csv_output.m`
-  - `challenge_scripts/export_csv_pipeline.m`
-  - `challenge_scripts/interpolate_to_dense_grid_from_mask.m`
-  - `challenge_scripts/compute_strain_dense_grid_lowmem.m`
-  - `challenge_scripts/export_challenge_csv.m`
-  - `results/csv_output/README.md`
+### E1: Extend `.gitignore`
+Append the 13 private-file patterns (see design doc).
+Commit: `chore: gitignore private research and personal files`
 
-**Step 1: Verify files exist on disk**
-
-Run: `ls run_coarse_test_noise.m run_export_csv.m validate_csv_output.m challenge_scripts/export_csv_pipeline.m challenge_scripts/interpolate_to_dense_grid_from_mask.m challenge_scripts/compute_strain_dense_grid_lowmem.m challenge_scripts/export_challenge_csv.m results/csv_output/README.md`
-
-Expected: all 8 files listed with no errors.
-
-**Step 2: Remove from git index**
-
-```bash
-git rm --cached \
-  run_coarse_test_noise.m \
-  run_export_csv.m \
-  validate_csv_output.m \
+### E2: Un-track committed private files
+```
+git rm --cached run_coarse_test_noise.m run_export_csv.m validate_csv_output.m \
   challenge_scripts/export_csv_pipeline.m \
   challenge_scripts/interpolate_to_dense_grid_from_mask.m \
   challenge_scripts/compute_strain_dense_grid_lowmem.m \
   challenge_scripts/export_challenge_csv.m \
   results/csv_output/README.md
 ```
+Commit: `chore: untrack private research files`
 
-Expected output: 8 `rm` lines.
-
-**Step 3: Verify files still on disk**
-
-Run same `ls` as step 1. Expected: all files still present.
-
-**Step 4: Verify git now ignores them**
-
-Run: `git status --short | grep -E "(run_|challenge_scripts/|csv_output)"`. Expected: empty (all caught by gitignore).
-
-**Step 5: Commit**
-
-```bash
-git -c commit.gpgsign=false commit -m "chore: untrack private research files (kept on disk)"
-```
+### E3: Verify
+`git status` should show no `run_export_*`, `challenge_scripts/*`, or `results/csv_output/*` entries.
 
 ---
 
-### Task E3: Verify clean state
+## C6 — Defaults + validation (2 commits)
 
-**Step 1: Check git status**
-
-Run: `git status --short`
-
-Expected: Only modifications to `main_3D_ALDIC.m`, `func/*.m`, etc. — no `run_export_*`, `challenge_scripts/*`, or `results/*` lines.
-
-**Step 2: Confirm working tree builds mentally**
-
-Spot-check: `git ls-files | grep -E "(run_export|challenge_scripts|coarse_test_|validate_csv)"` should return empty.
-
----
-
-## Workstream C1: `main_3D_ALDIC.m` Cleanup (no behavior change)
-
-All tasks modify `main_3D_ALDIC.m` only unless noted. Line numbers below refer to the file **at its current state (404 lines)**. After each task commits, subsequent line numbers will drift — use the code-context strings in each task to locate edits, not line numbers.
-
-### Task C1.1: Remove commented-out dead code
-
-**Files:**
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: Remove each of the following blocks**
-
-Find and delete these commented-out lines (keep the active hardcoded defaults that follow them):
-
-1. In Section 3.1 (calib_method):
+### C6.1: Create `func/setDICparaDefaults.m`
 ```matlab
-% calib_method = 0;
-```
-
-2. In Section 6 (after `DICpara.outputFilePath`):
-```matlab
-% DICpara.um2px = funParaInput('ConvertUnit');
-```
-(keep `DICpara.um2px = 1;`)
-
-3. The smooth prompt:
-```matlab
-%DICpara.DoYouWantToSmoothOnceMore = funParaInput('SmoothDispOrNot');
-```
-(keep `DICpara.DoYouWantToSmoothOnceMore = 0;`)
-
-4. The strain method prompt:
-```matlab
-% ------ Choose strain computation method ------
-%DICpara.MethodToComputeStrain = funParaInput('StrainMethodOp');
-```
-
-5. The strain type prompt:
-```matlab
-% ------ Choose strain type (infinitesimal, Eulerian, Green-Lagrangian) ------
-%DICpara.StrainType = funParaInput('StrainType');
-```
-(keep `DICpara.StrainType = 0;` and its comment)
-
-6. Save fig format:
-```matlab
-%DICpara.MethodToSaveFig = 1;
-```
-
-7. Transparency block inside `if DICpara.MethodToSaveFig == 1`:
-```matlab
-% DICpara.OrigDICImgTransparency = funParaInput('OrigDICImgTransparency');
-```
-
-8. The smooth prompt block at the top of the for-loop (lines ~300-303):
-```matlab
-% prompt = 'Do you want to smooth displacement? (0-yes; 1-no)';
-% DoYouWantToSmoothOnceMore = input(prompt);
-% ------ Smooth displacements ------
-```
-
-9. The pre-display disp block (lines ~329-330):
-```matlab
-% close all; Plotdisp_show_3D(FinalResult.Displacement(ImgSeqNum,:),RD_L.ResultFEMeshEachFrame{1,1}.coordinatesFEM,...
-%     RD_L.ResultFEMeshEachFrame{1,1}.elementsFEM,DICpara,'NoEdgeColor');
-```
-
-10. The PlotWarpage block (lines ~355-357):
-```matlab
-% Zach Optional：
-% PlotWarpage(FinalResult.warpage(ImgSeqNum,:),RD_L.ResultDisp{ImgSeqNum-1,1}.U,...
-%     RD_L.ResultFEMeshEachFrame{1,1}, FullImageName_first,FullImageName_current,DICpara,voidIndex);
-```
-
-11. The final save block (lines ~399-401):
-```matlab
-% selectedFolder = uigetdir('', 'Select save folder');
-% results_name = [selectedFolder,'\','results_',ImageName,'_ws',num2str(DICpara.winsize),'_st',num2str(DICpara.winstepsize),'.mat'];
-% save(results_name, 'FullImageName_current','DICpara','FinalResult');
-```
-
-Also remove the inner `if DICpara.transformDisp == 0 ... else ... end` with all-commented branches around line 307-312 — just keep the active else branch body as the single call.
-
-**Step 2: Lint**
-
-Run: `matlab -batch "checkcode('main_3D_ALDIC.m', '-cyc', '-nostringlist')"`
-
-Expected: no NEW warnings vs. before this task (pre-existing warnings OK).
-
-**Step 3: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "refactor: remove commented-out dead code from main_3D_ALDIC"
-```
-
----
-
-### Task C1.2: Remove unused typo variable `shapeFuncOalized_rder`
-
-**Files:**
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: Find and delete the line**
-
-Find:
-```matlab
-shapeFuncOalized_rder = 1; % Curre1ntly, we only support 1st shape function
-```
-
-This line (in Section 4, right camera branch) is never referenced. Delete it entirely. The call below (`TemporalMatch_quadtree_ST1(..., shapeFuncOrder)`) uses `shapeFuncOrder` defined earlier in the left-camera branch, which is still in scope.
-
-**Step 2: Verify the actual usage**
-
-Run: `grep -n "shapeFuncO" main_3D_ALDIC.m`
-
-Expected: exactly 3 matches (line assignment in Section 4 Left, call in Section 4 Left, call in Section 4 Right) — all using `shapeFuncOrder`, not the typo.
-
-**Step 3: Lint**
-
-`matlab -batch "checkcode('main_3D_ALDIC.m')"` — no new warnings.
-
-**Step 4: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "refactor: remove unused typo variable shapeFuncOalized_rder"
-```
-
----
-
-### Task C1.3: Renumber Section 6 banners
-
-**Files:**
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: Find the mis-labeled banners**
-
-Currently in Section 6 (strain computation):
-```matlab
-fprintf('------------ Section 8 Start ------------ \n')
-```
-and near the end:
-```matlab
-fprintf('------------ Section 8 Done ------------ \n \n')
-```
-
-**Step 2: Replace with correct numbering**
-
-Change `Section 8` → `Section 6` in both `fprintf` calls.
-
-**Step 3: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "refactor: fix section numbering in strain computation banner"
-```
-
----
-
-### Task C1.4: Remove Challenge 2.1 Bespoke hardcoded base points
-
-**Files:**
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: Find the leak**
-
-In Section 6, inside `if DICpara.transformDisp == 1`:
-```matlab
-Base_Points2D = getBasePoints(imageLeft{1,1}',maskLeft{1,1}');
-
-% Zach 20260127: Table values are 0-based, MATLAB is 1-based → +1
-Base_Points2D = [1024+1, 1224+1; 1509.69+1, 1219.38+1; 1020.10+1, 470.48+1];
-```
-
-The second assignment **overwrites** the interactive `getBasePoints` result with values hardcoded for Challenge 2.1 Bespoke.
-
-**Step 2: Delete the hardcoded override**
-
-Remove these two lines:
-```matlab
-
-% Zach 20260127: Table values are 0-based, MATLAB is 1-based → +1
-Base_Points2D = [1024+1, 1224+1; 1509.69+1, 1219.38+1; 1020.10+1, 470.48+1];
-```
-
-Keep the `Base_Points2D = getBasePoints(...)` call alone.
-
-**Step 3: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "refactor: remove Challenge 2.1 hardcoded base points override"
-```
-
----
-
-### Task C1.5: Remove personal annotations
-
-**Files:**
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: Find the annotations**
-
-1. In Section 3.1 (calib_method case 0):
-```matlab
-% ----------  Zach comments  --------------------
-% Do not use this line, please install CV toolbox and use stereo 
-% camera calibrator app to calibrate your cameras.
-% StereoInfo = StereoCameraCalibration; 
-% ---------------------------------------
-```
-
-2. Already handled in C1.4: `% Zach 20260127: ...`
-
-**Step 2: Rewrite the Section 3.1 comment**
-
-Replace the "Zach comments" block with a professional comment:
-```matlab
-% NOTE: Install Computer Vision Toolbox and use the Stereo Camera
-% Calibrator app to calibrate your cameras; then export via
-% cameraParamsFormatConvertFromMatlabCV below.
-```
-
-(Also remove the `% StereoInfo = StereoCameraCalibration;` line — it's dead code.)
-
-**Step 3: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "refactor: replace personal annotations with neutral comments"
-```
-
----
-
-### Task C1.6: Extract `initResultStorage` helper
-
-**Files:**
-- Create: `func/initResultStorage.m`
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: Create helper**
-
-Write `func/initResultStorage.m`:
-```matlab
-function RD = initResultStorage(numImagePairs, isIncremental)
-% INITRESULTSTORAGE Pre-allocate result containers for one camera.
-%
-%   RD = initResultStorage(numImagePairs, isIncremental)
-%
-% Inputs:
-%   numImagePairs - length(imgNormalized_*)
-%   isIncremental - true for DICpara.DICIncOrNot == 1
-%
-% Output:
-%   RD - struct with ResultDisp, ResultDefGrad, ResultFEMeshEachFrame,
-%        ResultFEMesh, and (if incremental) ResultDisp_inc.
-
-numFrames = numImagePairs - 1;
-RD.ResultDisp     = cell(numFrames, 1);
-RD.ResultDefGrad  = cell(numFrames, 1);
-
-if isIncremental
-    RD.ResultFEMeshEachFrame = cell(numFrames, 1);
-    RD.ResultFEMesh          = cell(numFrames, 1);
-    RD.ResultDisp_inc        = cell(numFrames, 1);
-else
-    RD.ResultFEMeshEachFrame = cell(1, 1);
-    RD.ResultFEMesh          = cell(1, 1);
-end
+function DICpara = setDICparaDefaults()
+% Returns a DICpara struct with all fields initialized to defaults.
+% Mirrors pyALDIC's al_dic.core.config.dicpara_default().
+
+DICpara = struct();
+
+% --- Algorithm ---
+DICpara.winsize              = [];      % user must set
+DICpara.winstepsize          = [];      % user must set
+DICpara.winsizeMin           = 8;
+DICpara.DICIncOrNot          = 0;       % 0=acc, 1=inc
+DICpara.NewFFTSearch         = 1;
+DICpara.UseGlobal            = true;
+DICpara.Subpb2FDOrFEM        = 1;
+DICpara.GaussPtOrder         = 2;
+DICpara.ClusterNo            = 1;
+
+% --- Image ---
+DICpara.ImgRefMask           = [];      % set by caller from mask
+DICpara.ImgSize              = [];
+DICpara.gridxyROIRange       = struct('gridx', [], 'gridy', []);
+DICpara.InitFFTSearchMethod  = 1;
+DICpara.LoadImgMethod        = 1;
+
+% --- Strain / output ---
+DICpara.strain_size          = [];      % prompts if empty
+DICpara.transformDisp        = 0;
+DICpara.um2px                = 1;
+DICpara.StrainType           = 0;       % 0 = Green-Lagrange (only supported)
+
+% --- Smoothing (independent 2D/3D counts) ---
+DICpara.Smooth2DTimes        = 0;       % inside ADMM, 0 = disabled
+DICpara.Smooth3DTimes        = 3;       % post-ALDIC, current default
+DICpara.DispSmoothness       = 0;
+DICpara.StrainSmoothness     = 0;
+DICpara.DispFilterSize       = 0;
+DICpara.DispFilterStd        = 0;
+DICpara.StrainFilterSize     = 0;
+DICpara.StrainFilterStd      = 0;
+
+% --- Plotting / output ---
+DICpara.PlotMode             = 'show';  % 'none' | 'save' | 'show'
+DICpara.showImgOrNot         = 0;       % debug figures inside algorithms
+DICpara.plots_disp_to_generate   = {'u', 'v', 'w', 'magnitude'};
+DICpara.plots_strain_to_generate = {'exx', 'eyy', 'exy', 'e1', 'e2'};
+DICpara.Image2PlotResults    = 1;
+DICpara.MethodToSaveFig      = 'png';
+DICpara.OrigDICImgTransparency = 0.8;
+DICpara.outputFilePath       = '';      % default fills with timestamp at runtime
+
+% --- MEX ---
+DICpara.forceMexRebuild      = false;
+
+% --- Optional callback ---
+DICpara.progressCallback     = [];      % @(frac, msg) printf()
 end
 ```
+Commit: `feat: add setDICparaDefaults.m (pyALDIC dicpara_default mirror)`
 
-**Step 2: Replace duplicated init in `main_3D_ALDIC.m`**
-
-Find the block starting `RD_L.ResultDisp = cell(length(imgNormalized_L)-1,1);` through `RD_R.ResultDisp_inc = cell(length(imgNormalized_L)-1,1); end` (~20 lines, including `RD_L`, `RD_R`, and the two if/else blocks).
-
-Replace with:
+### C6.2: Create `func/validateDICpara.m`
 ```matlab
-% ====== Initialize variable storage ======
-isIncremental = (DICpara.DICIncOrNot == 1);
-RD_L = initResultStorage(length(imgNormalized_L), isIncremental);
-RD_R = initResultStorage(length(imgNormalized_R), isIncremental);
-```
+function validateDICpara(DICpara)
+% Raises error on common misconfigurations.
+% Mirrors pyALDIC's al_dic.core.config.validate_dicpara().
 
-**Step 3: Lint both files**
-
-```bash
-matlab -batch "checkcode('main_3D_ALDIC.m'); checkcode('func/initResultStorage.m')"
-```
-
-Expected: no errors.
-
-**Step 4: Commit**
-
-```bash
-git add main_3D_ALDIC.m func/initResultStorage.m
-git -c commit.gpgsign=false commit -m "refactor: extract initResultStorage helper from main script"
-```
-
----
-
-### Task C1.7: Replace hardcoded `'\'` with `fullfile()`
-
-**Files:**
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: Find the hardcoded joins**
-
-In the for-loop:
-```matlab
-FullImageName_current = [fileNameLeft{2,ImgSeqNum} ,'\', fileNameLeft{1,ImgSeqNum}];
-FullImageName_first = [fileNameLeft{2,1} ,'\', fileNameLeft{1,1}];
-```
-
-**Step 2: Replace with `fullfile`**
-
-```matlab
-FullImageName_current = fullfile(fileNameLeft{2,ImgSeqNum}, fileNameLeft{1,ImgSeqNum});
-FullImageName_first   = fullfile(fileNameLeft{2,1}, fileNameLeft{1,1});
-```
-
-**Step 3: Search for any other `'\'` joins**
-
-Run: `grep -n "'\\\\'" main_3D_ALDIC.m` and `grep -nF "'\\'" main_3D_ALDIC.m`
-
-If matches appear, apply the same `fullfile` fix.
-
-**Step 4: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "refactor: use fullfile() instead of hardcoded path separator"
-```
-
----
-
-### Task C1.8: Extract 3D reconstruction verification block
-
-**Files:**
-- Create: `func/verify_stereo_calibration.m`
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: Create the helper**
-
-Write `func/verify_stereo_calibration.m`:
-```matlab
-function [reconstructedPoints, reprojectionErrors] = verify_stereo_calibration(StereoInfo, showPlot)
-% VERIFY_STEREO_CALIBRATION Reconstruct 3D points from stereo match
-% (first frame only) and optionally display a scatter plot + mean
-% reprojection error. Use after Section 3.2 as a sanity check.
-%
-%   [pts, errs] = verify_stereo_calibration(StereoInfo)           % plots
-%   [pts, errs] = verify_stereo_calibration(StereoInfo, false)    % no plot
-
-if nargin < 2, showPlot = true; end
-
-RD0_L_Pts = StereoInfo.ResultFEMeshEachFrame.coordinatesFEM;
-RD0_R_Pts = StereoInfo.ResultFEMesh_corr;
-matchedPairs = { [RD0_L_Pts, RD0_R_Pts] };
-
-cameraParams = StereoInfo.cameraParams;
-K_left  = cameraParams.cameraParamsLeft.K;
-K_right = cameraParams.cameraParamsRight.K;
-R_left  = eye(3);
-T_left  = zeros(3, 1);
-R_right = cameraParams.rotationMatrix;
-T_right = cameraParams.translationVector';
-
-matchedPairs_undistort = funUndistortPoints(matchedPairs, cameraParams);
-
-P_left  = K_left  * [R_left,  T_left];
-P_right = K_right * [R_right, T_right];
-
-reconstructedPoints = cell(size(matchedPairs_undistort, 1), 1);
-reprojectionErrors  = cell(size(matchedPairs_undistort, 1), 1);
-
-for i = 1:size(matchedPairs_undistort, 1)
-    [reconstructedPoints{i,1}, reprojectionErrors{i}] = triangulate( ...
-        matchedPairs_undistort{i,1}(:, 1:2), ...
-        matchedPairs_undistort{i,1}(:, 3:4), ...
-        P_left, P_right);
+if ~isempty(DICpara.winsize) && (mod(DICpara.winsize, 2) ~= 0 || DICpara.winsize <= 0)
+    error('winsize must be positive even integer, got %g', DICpara.winsize);
 end
-
-if showPlot
-    figure; plot(RD0_L_Pts(:,1), RD0_L_Pts(:,2), 'o');
-    hold on; plot(RD0_R_Pts(:,1), RD0_R_Pts(:,2), 'o');
-    figure; scatter3(reconstructedPoints{1,1}(:,1), ...
-                     reconstructedPoints{1,1}(:,2), ...
-                     reconstructedPoints{1,1}(:,3));
-    fprintf('mean reprojection error = %.4f\n', mean(reprojectionErrors{1}));
-end
-end
-```
-
-**Step 2: Replace the embedded block in `main_3D_ALDIC.m`**
-
-Find the block between `%%%%%%%%%%%%%%%%%%%%% Test 3D construction: START %%%%%%%%%%%%%%%%%%%%%` and `%%%%%%%%%%%%%%%%%%%%% Test end %%%%%%%%%%%%%%%%%%%%%` (inclusive of both fence comments).
-
-Replace with:
-```matlab
-% Optional: sanity-check stereo calibration on frame 1
-if isfield(DICpara, 'verifyStereoReconstruction') && DICpara.verifyStereoReconstruction
-    verify_stereo_calibration(StereoInfo);
-end
-```
-
-**Step 3: Lint**
-
-```bash
-matlab -batch "checkcode('main_3D_ALDIC.m'); checkcode('func/verify_stereo_calibration.m')"
-```
-
-**Step 4: Commit**
-
-```bash
-git add main_3D_ALDIC.m func/verify_stereo_calibration.m
-git -c commit.gpgsign=false commit -m "refactor: extract stereo verification block into helper function"
-```
-
----
-
-## Workstream C2: User Convenience
-
-These tasks change behavior in small, intentional ways. Each is backward-compatible (defaults preserve old behavior).
-
-### Task C2.1: Smart mex recompile
-
-**Files:**
-- Modify: `main_3D_ALDIC.m` (Section 1)
-
-**Step 1: Replace the unconditional `mex` call**
-
-Find:
-```matlab
-try
-    mex -O ba_interp2_spline.cpp;
-    warning('off');
-    fprintf('Mex compilation successful.\n');
-catch ME
-    fprintf('Mex compilation failed: %s\n', ME.message);
-    fprintf('Please check complier installation and path.\n');
-end
-```
-
-Replace with:
-```matlab
-mex_src = 'ba_interp2_spline.cpp';
-mex_bin = ['ba_interp2_spline.', mexext];
-needRebuild = ~exist(mex_bin, 'file') || ...
-              (exist(mex_bin, 'file') && ...
-               dir(mex_src).datenum > dir(mex_bin).datenum);
-if isfield(DICpara, 'forceMexRebuild') && DICpara.forceMexRebuild
-    needRebuild = true;
-end
-if needRebuild
-    try
-        mex('-O', mex_src);
-        warning('off');
-        fprintf('Mex compilation successful.\n');
-    catch ME
-        fprintf('Mex compilation failed: %s\n', ME.message);
-        fprintf('Please check compiler installation and path.\n');
+if ~isempty(DICpara.winstepsize)
+    isPow2 = @(v) v > 0 && bitand(v, v-1) == 0;
+    if ~isPow2(DICpara.winstepsize)
+        error('winstepsize must be a positive power of 2, got %g', DICpara.winstepsize);
     end
-else
-    fprintf('Mex binary up-to-date; skipping rebuild.\n');
-end
-```
-
-**Note:** `DICpara` doesn't exist yet at Section 1 (loaded in Section 2). So `isfield(DICpara, 'forceMexRebuild')` will error. Replace with:
-```matlab
-if exist('DICpara', 'var') && isfield(DICpara, 'forceMexRebuild') && DICpara.forceMexRebuild
-    needRebuild = true;
-end
-```
-
-**Step 2: Test**
-
-Delete `ba_interp2_spline.mexw64`. Run `main_3D_ALDIC` up through Section 1. Expect "Mex compilation successful". Run again. Expect "Mex binary up-to-date; skipping rebuild."
-
-**Step 3: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "feat: skip mex rebuild if binary is up-to-date"
-```
-
----
-
-### Task C2.2: Make `strain_size` a `DICpara` field with prompt fallback
-
-**Files:**
-- Modify: `main_3D_ALDIC.m` (Section 6)
-
-**Step 1: Replace the unconditional `input` prompt**
-
-Find:
-```matlab
-% ------ Start main part ------
-prompt = 'What is your strain size? e.g. 3,5,7...\nInput: ';
-strain_size = input(prompt);
-strain_length = (strain_size-1) * DICpara.winstepsize + 1;
-VSG_length = strain_length + DICpara.winsize;
-fprintf('Your strain size is %d * %d (Unit: Calculated Points) \nYour VSG size is %d * %d (Unit: Pixel) \n', strain_size,strain_size,VSG_length,VSG_length);
-```
-
-Replace with:
-```matlab
-% ------ Strain size: from DICpara if set, else prompt ------
-if isfield(DICpara, 'strain_size') && ~isempty(DICpara.strain_size)
-    strain_size = DICpara.strain_size;
-else
-    strain_size = input('What is your strain size? e.g. 3,5,7...\nInput: ');
-    DICpara.strain_size = strain_size;
-end
-strain_length = (strain_size - 1) * DICpara.winstepsize + 1;
-VSG_length    = strain_length + DICpara.winsize;
-fprintf('strain_size = %d x %d pts  |  VSG = %d x %d px\n', ...
-    strain_size, strain_size, VSG_length, VSG_length);
-```
-
-**Step 2: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "feat: allow preset DICpara.strain_size to skip interactive prompt"
-```
-
----
-
-### Task C2.3: Conditional `MW_MINGW64_LOC` setenv
-
-**Files:**
-- Modify: `main_3D_ALDIC.m` (Section 1)
-
-**Step 1: Replace the unconditional `setenv`**
-
-Find:
-```matlab
-setenv('MW_MINGW64_LOC','C:\TDM-GCC-64');
-```
-
-Replace with:
-```matlab
-% Set MW_MINGW64_LOC only if not already set and the default path exists
-if isempty(getenv('MW_MINGW64_LOC'))
-    default_mingw = 'C:\TDM-GCC-64';
-    if exist(default_mingw, 'dir')
-        setenv('MW_MINGW64_LOC', default_mingw);
-    else
-        warning('MW_MINGW64_LOC not set and %s does not exist. If mex compilation fails, set this env var to your MinGW install path.', default_mingw);
+    if DICpara.winsizeMin > DICpara.winstepsize
+        error('winsizeMin (%d) must be <= winstepsize (%d)', ...
+            DICpara.winsizeMin, DICpara.winstepsize);
     end
 end
+if ~ismember(DICpara.DICIncOrNot, [0 1])
+    error('DICIncOrNot must be 0 (acc) or 1 (inc), got %g', DICpara.DICIncOrNot);
+end
+if ~ismember(DICpara.PlotMode, {'none', 'save', 'show'})
+    error('PlotMode must be ''none'', ''save'', or ''show''');
+end
+if ~ismember(DICpara.StrainType, 0:3)
+    error('StrainType must be 0-3');
+end
+if DICpara.Smooth2DTimes < 0 || DICpara.Smooth3DTimes < 0
+    error('SmoothNTimes must be non-negative');
+end
+end
 ```
-
-**Step 2: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "feat: conditionally set MW_MINGW64_LOC with fallback warning"
-```
+Commit: `feat: add validateDICpara.m for config validation`
 
 ---
 
-### Task C2.4: Default `outputFilePath` with timestamp
+## C1 — Cleanup (5 commits, grouped)
 
-**Files:**
-- Modify: `main_3D_ALDIC.m` (Section 6)
+### C1a: Remove dead commented code from `main_3D_ALDIC.m`
+See design doc C1 section 1.1-1.5, 1.7. Remove ~11 blocks.
+Commit: `refactor(main): remove dead commented code, typos, hardcoded leaks`
 
-**Step 1: Replace the empty default**
+### C1b: Remove dead code from `TemporalMatch_quadtree_ST1.m`
+- L30-42 + L201-213: DataDriven mode (Q1 = don't need)
+- L132-153: commented RBF initial guess
+- L370-382: adaptive winsize commented code
+- L349, 404, 422, 444, 585: commented `save(...)` debug dumps
+- L63-77: replace "Zach Attention" hack with proper note (real fix comes in C3.2)
+Commit: `refactor(temporal): remove data-driven mode, dead RBF/winsize blocks`
 
-Find:
-```matlab
-% Image save path
-DICpara.outputFilePath = [];
-```
+### C1c: Remove dead code from `StereoMatch_STAQ.m`, `stereoReconstruction_quadtree.m`, `setDICParas_STAQ.m`, `setDICParas_IncOrNot.m`, `funParaInput.m`
+- StereoMatch L53-55: commented ResultFEMesh
+- stereoReconstruction: drop `computeFundamentalEssentialMatrix` + `skewSymmetric` (unused)
+- setDICParas_STAQ: drop L10-27 (old ROI UI) + L63-64 double-assign + L78-127 (migrated)
+- setDICParas_IncOrNot: drop try/catch around switch (unreachable)
+- funParaInput: fix L27 variable name, drop L223-230 `MaterialModel` case, fix "Eluerian" typo
+- Remove 2nd-order shape function branches in `main` + `StereoMatch_STAQ`
+Commit: `refactor: remove dead code from calib/params/stereo helpers`
 
-Replace with:
-```matlab
-% Image save path: default to ./results/<timestamp>/ unless preset
-if ~isfield(DICpara, 'outputFilePath') || isempty(DICpara.outputFilePath)
-    DICpara.outputFilePath = fullfile('.', 'results', datestr(now, 'yyyymmdd_HHMMSS'));
-end
-if ~exist(DICpara.outputFilePath, 'dir')
-    mkdir(DICpara.outputFilePath);
-end
-fprintf('Output folder: %s\n', DICpara.outputFilePath);
-```
+### C1d: Remove dead code from `PlaneFit3_Quadtree.m`, plot functions
+- PlaneFit3_Quadtree L21-68: 48-line commented manual-selection block
+- PlaneFit3_Quadtree L93-126: Chinese comments → English
+- PlaneFit3_Quadtree L116-117: `max(..)-1` → `find(..,1,'first')-1`
+- PlotdispQuadtreeMasks3D_acc_ST1 L29-57: `JY!!!Mask` block (user confirmed remove)
+- PlotdispQuadtreeMasks3D_inc_ST1: remove analogous mask-out block if present
+Commit: `refactor(strain/plot): remove dead code, translate Chinese comments`
 
-**Step 2: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "feat: default outputFilePath to timestamped results folder"
-```
-
----
-
-### Task C2.5: Add `DICpara.PlotMode` for headless support
-
-**Files:**
-- Modify: `main_3D_ALDIC.m` (Section 6, inside the for-loop)
-
-**Step 1: Set default at top of Section 6**
-
-After the other `DICpara.*` defaults (e.g., after the `DICpara.Image2PlotResults` assignment), add:
-```matlab
-% ------ Plot mode: 'show' (default) | 'save' | 'none' (headless) ------
-if ~isfield(DICpara, 'PlotMode') || isempty(DICpara.PlotMode)
-    DICpara.PlotMode = 'show';
-end
-```
-
-**Step 2: Guard the Plot* calls inside the for-loop**
-
-Wrap the `if DICpara.DICIncOrNot == 0 ... elseif == 1 ... end` block (the one containing `PlotdispQuadtreeMasks3D_*_ST1` and `PlotstrainQuadtreeMasks3D_*_ST1` calls) with:
-
-```matlab
-if ~strcmp(DICpara.PlotMode, 'none')
-    if DICpara.DICIncOrNot == 0
-        % ... existing acc branch (PlotdispQuadtreeMasks3D_acc_ST1 +
-        %     PlotstrainQuadtreeMasks3D_acc_ST1)
-    elseif DICpara.DICIncOrNot == 1
-        % ... existing inc branch
-    end
-else
-    % Still need to compute strain even in headless mode.
-    % The PlotstrainQuadtreeMasks3D_* functions do strain computation
-    % inline; when headless, we need an alternative strain-only call.
-    % For v1 of this refactor: strain_* are NOT computed in 'none' mode.
-    % This is a known limitation documented below.
-    strain_exx = []; strain_eyy = []; strain_exy = [];
-    strain_principal_max = []; strain_principal_min = [];
-    strain_maxshear = []; strain_vonMises = [];
-end
-```
-
-**Known limitation:** `PlotstrainQuadtreeMasks3D_*_ST1` couples strain computation with plotting. Truly headless strain requires a separate refactor (outside this task). Current v1 just skips both when `PlotMode = 'none'`; `FinalResult.ResultStrainWorld{ImgSeqNum,1}` will contain empty fields. Add a warning when the user sets `'none'`:
-
-```matlab
-if strcmp(DICpara.PlotMode, 'none')
-    warning('PlotMode=''none'' also skips strain computation in v1. Set to ''save'' for strain + saved figures without display.');
-end
-```
-
-Place this warning once, right after the PlotMode default assignment.
-
-**Step 3: Also guard `close all` inside loop**
-
-Find `close all;` inside the for-loop (lines ~291 and 391). Wrap:
-```matlab
-if ~strcmp(DICpara.PlotMode, 'none')
-    close all;
-end
-```
-
-**Step 4: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "feat: add DICpara.PlotMode for save/headless modes"
-```
+### C1e: Remove all remaining Chinese comments across codebase
+Grep for `[\u4e00-\u9fff]` and translate to English.
+Commit: `refactor: translate all remaining Chinese comments to English`
 
 ---
 
-### Task C2.6: Uniform section banners with elapsed time
+## C5 — Smoothing parameterization (2 commits)
 
-**Files:**
-- Modify: `main_3D_ALDIC.m`
-
-**Step 1: At the very top of Section 1**
-
-Add:
+### C5.1: Replace hardcoded `SmoothTimes < 3` in `main_3D_ALDIC.m` L307
 ```matlab
-session_start = tic;
-numSections = 6;
+while DICpara.Smooth3DTimes > 0 && SmoothTimes < DICpara.Smooth3DTimes
+    FinalResult.Displacement_smooth(ImgSeqNum,:) = funSmoothDisp_Quadtree(...);
+    SmoothTimes = SmoothTimes + 1;
+end
 ```
+Also update `funSmoothDisp_Quadtree.m` to respect `DICpara.Smooth3DTimes` internal loop (L101 `if SmoothTimes > 2 break` → parameterized).
+Commit: `feat(smooth): parameterize 3D smoothing count via DICpara.Smooth3DTimes`
 
-**Step 2: Define a local helper at top of file (before Section 1)**
-
-Right after the big header comment block (line ~39), add:
-```matlab
-sectionBanner = @(n, name) fprintf('\n==== Section %d/%d: %s  |  elapsed: %.1fs ====\n', ...
-    n, numSections, name, toc(session_start));
-```
-
-**Note:** This creates an anonymous function that captures `session_start` and `numSections`. Requires both to be defined first — so put the two declarations (`session_start = tic; numSections = 6;`) BEFORE the anonymous function.
-
-**Step 3: Replace each `fprintf('------------ Section X Start ------------ \n')` and `Done` variant**
-
-Section 1 Start → `sectionBanner(1, 'Environment & mex setup');`
-Section 2 Start → `sectionBanner(2, 'Load images & DIC parameters');`
-Section 3 Start (combine 3.1 + 3.2 conceptually; keep sub-banners) → `sectionBanner(3, 'Stereo calibration & matching');`
-Section 4 Start → `sectionBanner(4, 'Temporal matching');`
-Section 5 Start → `sectionBanner(5, '3D reconstruction');`
-Section 6 Start → `sectionBanner(6, 'Strain & visualization');`
-
-Remove the old `------------ Section X Start ------------ \n` and `Done` lines; the new single banner per section is enough.
-
-At the very end of the script, add:
-```matlab
-fprintf('\n==== ALL DONE  |  total elapsed: %.1fs ====\n', toc(session_start));
-```
-
-**Step 4: Commit**
-
-```bash
-git add main_3D_ALDIC.m
-git -c commit.gpgsign=false commit -m "feat: add uniform section banners with elapsed time"
-```
+### C5.2: Parameterize 2D smoothing in `TemporalMatch_quadtree_ST1.m`
+Currently `DICpara.DispSmoothness=0; StrainSmoothness=0` is hardcoded L286-287. Remove those lines and rely on the defaults from C6.1 (which keep them 0). Update `funSmoothDispQuadtree.m` L86 to respect `DICpara.Smooth2DTimes`.
+Commit: `feat(smooth): parameterize 2D smoothing count via DICpara.Smooth2DTimes`
 
 ---
 
-## Final: Post-refactor validation
+## C2 — User convenience (5 commits)
 
-### Task V1: Static check + line count
+### C2.1: Smart mex recompile in `main_3D_ALDIC.m`
+Check `dir(mex_bin).datenum > dir(mex_src).datenum`, skip if up-to-date. Respect `DICpara.forceMexRebuild`.
+Commit: `feat(main): skip mex rebuild if binary up-to-date`
 
-**Step 1: Lint full file**
+### C2.2: Conditional MinGW setenv
+Replace unconditional `setenv('MW_MINGW64_LOC','C:\TDM-GCC-64')` with `if isempty(getenv(...)) && exist(path, 'dir'), setenv; end`. Emit warning if neither.
+Commit: `feat(main): conditional MW_MINGW64_LOC setenv with fallback`
 
-```bash
-matlab -batch "msgs = checkcode('main_3D_ALDIC.m'); arrayfun(@(m) fprintf('%d: %s\n', m.line, m.message), msgs)"
-```
+### C2.3: Default `outputFilePath` with timestamp
+When `DICpara.outputFilePath` is empty at Section 6, fill with `./results/<yyyymmdd_HHMMSS>/` and `mkdir`.
+Commit: `feat(main): default outputFilePath to timestamped results folder`
 
-Expected: warnings allowed only if they pre-existed. No `err` level messages.
+### C2.4: Section banners with elapsed time
+Define anonymous function `sectionBanner = @(n, name) fprintf(...)` at top of script; replace all `------ Section X Start ------` strings. Add final "ALL DONE" with total elapsed.
+Commit: `feat(main): uniform section banners with elapsed time`
 
-**Step 2: Line count check**
-
-```bash
-wc -l main_3D_ALDIC.m
-```
-
-Expected: ~230-270 lines (was 404). If still > 300, spot-check what's left.
-
-### Task V2: Runtime verification (user-driven)
-
-**Step 1:** Run `main_3D_ALDIC` on `examples/Stereo_DIC_Challenge_1.0_S3/` with same inputs as `baseline_before.mat` capture.
-
-**Step 2:** Save `FinalResult` as `baseline_after.mat`.
-
-**Step 3:** Compare against `baseline_before.mat` using the diff script in the Pre-flight section.
-
-Expected: max displacement diff < 1e-10.
-
-**Step 4: Final commit (if nothing to commit, skip)**
-
-After confirming validation, you're done.
+### C2.5: Promote hardcoded overrides to `DICpara` fields
+- `TemporalMatch_quadtree_ST1.m` L9: `UseGlobal = DICpara.UseGlobal;` (with default true from C6.1)
+- `TemporalMatch_quadtree_ST1.m` L10: remove `DICpara.showImgOrNot = 0;` (respect caller)
+- `TemporalMatch_quadtree_ST1.m` L103: remove `DICpara.NewFFTSearch = 1;` (respect setDICparaDefaults value)
+- `setDICParas_IncOrNot.m` L38: remove `NewFFTSearch = 1; %tbd` (same field, different place)
+Commit: `feat: promote UseGlobal/showImgOrNot/NewFFTSearch to DICpara fields`
 
 ---
 
-## Summary
+## C4 — Light GUI guard (1 commit)
 
-| Workstream | Tasks | Est. time |
-|---|---|---|
-| E (git hygiene) | 3 | 15 min |
-| C1 (cleanup) | 8 | 60-90 min |
-| C2 (user convenience) | 6 | 60-90 min |
-| Validation | 2 | 30 min |
-| **Total** | **19** | **~4 hours** |
+### C4.1: Each prompt guarded by `isempty(DICpara.X)`
+- `main_3D_ALDIC.m` L277 (strain_size): `if isempty(DICpara.strain_size), prompt, DICpara.strain_size = ..., end`
+- Section 3.1 calib method: `if isempty(DICpara.calibrationMethod), funParaInput, end`
+- Section 6: `Image2PlotResults`, `SaveFigFormat`, `TransformDispOrNot` — all guarded
+- `setDICParas_STAQ.m` L53 winsize, L58 winstepsize, `setDICParas_IncOrNot` L9 incOrNot — all guarded
 
-Each task is independently committable and reversible via `git revert`.
+This enables batch mode: pre-populate DICpara → main runs end-to-end without prompts.
+Commit: `feat: skip interactive prompts when DICpara fields are preset`
+
+---
+
+## C3 — Architectural (5 commits)
+
+### C3.1: Extract `func_quadtree/computeStrain3D.m` (B1)
+```matlab
+function [exx, eyy, exy, e1, e2, maxShear, vonMises, dwdx, dwdy] = ...
+    computeStrain3D(coefficients)
+% Computes Green-Lagrange strain components from displacement
+% gradient coefficients. See PlaneFit3_Quadtree.m for format.
+
+n = size(coefficients, 1);
+[exx, eyy, exy, dwdx, dwdy] = deal(zeros(n, 1));
+for i = 1:n
+    u_x = coefficients{i,1}(1,1); u_y = coefficients{i,1}(2,1); u_z = coefficients{i,1}(3,1);
+    v_x = coefficients{i,1}(1,2); v_y = coefficients{i,1}(2,2); v_z = coefficients{i,1}(3,2);
+    w_x = coefficients{i,1}(1,3); w_y = coefficients{i,1}(2,3); w_z = coefficients{i,1}(3,3);
+    F = [1+u_x, u_y, u_z; v_x, 1+v_y, v_z; w_x, w_y, 1+w_z];  % unified (A9.3)
+    E = 0.5 * (F' * F - eye(3));
+    exx(i) = E(1,1); eyy(i) = E(2,2); exy(i) = E(1,2);
+    dwdx(i) = w_x;   dwdy(i) = w_y;
+end
+maxShear = sqrt((0.5*(exx-eyy)).^2 + exy.^2);
+e1 = 0.5*(exx+eyy) + maxShear;
+e2 = 0.5*(exx+eyy) - maxShear;
+vonMises = sqrt(e1.^2 + e2.^2 - e1.*e2 + 3*maxShear.^2);
+end
+```
+Update `PlotstrainQuadtreeMasks3D_acc_ST1.m` and `_inc_ST1.m` to call `computeStrain3D` (drop their inline strain loops).
+Commit: `refactor(strain): extract computeStrain3D, unify acc/inc F matrix`
+
+### C3.2: Right-camera DICpara isolation (Q5=B)
+Change `TemporalMatch_quadtree_ST1.m` signature from:
+```
+function RD = TemporalMatch_quadtree_ST1(DICpara, fileName, ImgMask, ImgNormalized, RD, stereoInfo, camera0OrNot, shapeFuncOrder)
+```
+to:
+```
+function RD = TemporalMatch_quadtree_ST1(DICpara, fileName, ImgMask, ImgNormalized, RD, stereoInfo, camera0OrNot, shapeFuncOrder, refMask, roiRange)
+```
+Caller (main + test) passes per-camera `refMask` and `roiRange`. Remove the "fake update" hack at L63-77; inside function, use the passed `refMask`/`roiRange` directly.
+Commit: `refactor(temporal): isolate right-camera mask/ROI via explicit args`
+
+### C3.3: RBF → `scatteredInterpolant` in strain plot inc version (B5)
+In `PlotstrainQuadtreeMasks3D_inc_ST1.m` L43-56, replace `rbfcreate`/`rbfinterp` with `scatteredInterpolant('natural', 'none')`.
+Commit: `perf: replace RBF with scatteredInterpolant in strain plot (inc)`
+
+### C3.4: Fix inc plot position (Q6=b)
+In `PlotstrainQuadtreeMasks3D_inc_ST1.m` L38, change:
+```matlab
+coordinatesFEMWorldDef = [CurrentFEM.coordinatesFEM(:,1)+U_2D_L_inc(1:2:end), ...]
+```
+to:
+```matlab
+coordinatesFEMWorldDef = CurrentFEM.coordinatesFEM;
+```
+Commit: `fix(plot): use CurrentFEM position directly for inc strain plot`
+
+### C3.5: Main script extractions
+- `func/initResultStorage.m` (from v1 design C1.6)
+- `func/verify_stereo_calibration.m` (from v1 design C1.8)
+- Update `main_3D_ALDIC.m` to call them
+Commit: `refactor(main): extract initResultStorage + verify_stereo_calibration helpers`
+
+---
+
+## Final validation
+
+After all workstreams:
+1. `tests/run_pipeline_test.m` passes with < 20% timing regression and zero disp/coord regression
+2. `matlab -batch "checkcode('main_3D_ALDIC.m')"` shows no new warnings
+3. `wc -l main_3D_ALDIC.m` shows ~230-270 (down from 404)
+4. User manually runs `main_3D_ALDIC` interactively — all prompts still work
+
+---
+
+## Rollback protocol
+
+If test fails after a commit:
+```
+git reset --hard HEAD~1   # roll back last commit (preserves later commits on a branch)
+```
+Debug before re-applying. All commits are small, so rollback is cheap.
