@@ -31,9 +31,14 @@ DICpara.GaussPtOrder         = 2;
 DICpara.ClusterNo            = 1;       % parpool size; 1 = serial
 
 % ---------------------------------------------------------------------
-% FFT initial-guess search region (set to [] to force interactive prompt)
+% FFT initial-guess search radius. Scalar -> square [s,s]; 2-vec -> [x,y];
+% 4-vec -> [left,right,up,down] (funIntegerSearch clamps at image edges).
+% Stereo and temporal can be independent; legacy NewFFTSearchDistance
+% applies to both if the specific fields are empty.
 % ---------------------------------------------------------------------
-DICpara.NewFFTSearchDistance   = [];    % e.g. [60, 60] px for stereo disparity
+DICpara.StereoSearchDistance   = [];    % for stereo matching (frame 1, ImgSeqNum = -1)
+DICpara.TemporalSearchDistance = [];    % for temporal matching (frames >= 2)
+DICpara.NewFFTSearchDistance   = [];    % legacy fallback (used by either if specific is empty)
 DICpara.fixSearchDistanceOrNot = 0;     % 0 = reuse preset for all frames, 1 = re-prompt per frame
 
 % ---------------------------------------------------------------------

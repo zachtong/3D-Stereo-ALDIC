@@ -49,17 +49,25 @@ if (InitFFTSearchMethod == 1) || (InitFFTSearchMethod == 2)
     InitialGuessSatisfied = 1;
     while InitialGuessSatisfied == 1
 
-        % Decide tempSizeOfSearchRegion: preset -> silent, else prompt.
+        % Decide tempSizeOfSearchRegion: check stage-specific preset
+        % (Stereo or Temporal), fall back to legacy NewFFTSearchDistance.
         tempSizeOfSearchRegion = [];  % sentinel
-        if ImgSeqNum == 2 && isfield(DICpara,'NewFFTSearchDistance') && ...
-                ~isempty(DICpara.NewFFTSearchDistance)
-            tempSizeOfSearchRegion = DICpara.NewFFTSearchDistance;
-            if ~isfield(DICpara,'fixSearchDistanceOrNot'), DICpara.fixSearchDistanceOrNot = 0; end
-        elseif ImgSeqNum > 2 && DICpara.fixSearchDistanceOrNot == 0
-            tempSizeOfSearchRegion = DICpara.NewFFTSearchDistance;
-        elseif ImgSeqNum == -1 && isfield(DICpara,'NewFFTSearchDistance') && ...
-                ~isempty(DICpara.NewFFTSearchDistance)
-            tempSizeOfSearchRegion = DICpara.NewFFTSearchDistance;
+        if ImgSeqNum == -1
+            % Stereo matching
+            if isfield(DICpara,'StereoSearchDistance') && ~isempty(DICpara.StereoSearchDistance)
+                tempSizeOfSearchRegion = DICpara.StereoSearchDistance;
+            elseif isfield(DICpara,'NewFFTSearchDistance') && ~isempty(DICpara.NewFFTSearchDistance)
+                tempSizeOfSearchRegion = DICpara.NewFFTSearchDistance;
+            end
+        elseif ImgSeqNum >= 2
+            % Temporal matching (frame 2 or later)
+            if isfield(DICpara,'TemporalSearchDistance') && ~isempty(DICpara.TemporalSearchDistance)
+                tempSizeOfSearchRegion = DICpara.TemporalSearchDistance;
+                if ~isfield(DICpara,'fixSearchDistanceOrNot'), DICpara.fixSearchDistanceOrNot = 0; end
+            elseif isfield(DICpara,'NewFFTSearchDistance') && ~isempty(DICpara.NewFFTSearchDistance)
+                tempSizeOfSearchRegion = DICpara.NewFFTSearchDistance;
+                if ~isfield(DICpara,'fixSearchDistanceOrNot'), DICpara.fixSearchDistanceOrNot = 0; end
+            end
         end
 
         if isempty(tempSizeOfSearchRegion)
