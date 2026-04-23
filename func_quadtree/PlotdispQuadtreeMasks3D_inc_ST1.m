@@ -38,35 +38,6 @@ else
     disp_u = U_3D{1}; disp_v = U_3D{2}; disp_w = U_3D{3};
 end
 
-%%%%%%%%%%% JY!!!Mask START %%%%%%%%%%%%%%%
-% if Image2PlotResults == 1
-%     if ~isempty(CurrentImgMask)
-%         for tempi = 1:size(coordinatesFEMWorldDef,1)
-%             try
-%                 if CurrentImgMask( round(coordinatesFEMWorldDef(tempi,1)/um2px), ...
-%                                     (size(CurrentImgMask,2)+1-round(coordinatesFEMWorldDef(tempi,2)/um2px)) ) == 0 
-%                     coordinatesFEMWorldDef(tempi,:) = [nan,nan];
-%                 end
-%             catch
-%                 coordinatesFEMWorldDef(tempi,:) = [nan,nan];
-%             end
-% 
-%         end
-%     else
-%         CurrentImgMask = imread(CurrentImg)';
-%         for tempi = 1:size(coordinatesFEMWorldDef,1)
-%             try
-%                 if CurrentImgMask( round(coordinatesFEMWorldDef(tempi,1)/um2px), ...
-%                         (size(CurrentImgMask,2)+1-round(coordinatesFEMWorldDef(tempi,2)/um2px)) ) < 0
-%                     coordinatesFEMWorldDef(tempi,:) = [nan,nan];
-%                 end
-%             catch
-%                 coordinatesFEMWorldDef(tempi,:) = [nan,nan];
-%             end
-%         end
-%     end
-% end
-%%%%%%%%%%% JY!!!Mask END %%%%%%%%%%%%%%%
 
 
 % Check which plots the user wants to generate
