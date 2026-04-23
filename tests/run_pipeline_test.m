@@ -81,6 +81,12 @@ DICpara.InitFFTSearchMethod = 1;
 DICpara.transformDisp   = 0;       % no coord transform in test
 DICpara.showImgOrNot    = 0;       % headless
 
+% FFT search zone: preset to bypass the interactive prompt in
+% IntegerSearchQuadtree. 60 px is generous for stereo disparity on a
+% 1920x1200 image and covers temporal motion between 3 near-identical frames.
+DICpara.NewFFTSearchDistance   = [60, 60];
+DICpara.fixSearchDistanceOrNot = 0;   % reuse preset for all subsequent frames
+
 % Tuning fields (match current TemporalMatch defaults)
 DICpara.DispFilterSize  = 0;
 DICpara.DispFilterStd   = 0;
