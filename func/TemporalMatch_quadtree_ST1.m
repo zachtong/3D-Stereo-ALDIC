@@ -55,22 +55,15 @@ for ImgSeqNum = 2 : imageNum
 
     Df = funImgGradient(fNormalized,fNormalized,fNormalizedMask);
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Zach Attention: because DICpara only stores left image info, to
-    % consider the right image temporal matching, we "fake" update masks
-    % and ROIrange (we didn't really change the DICpara in this func)
-    DICpara.ImgRefMask = fNormalizedMask;
-
-    if strcmp(camera0OrNot, 'notCamera0') 
-        [temp_rows, temp_cols] = find(fNormalizedMask);
-        temp_gridx(1) = min(temp_rows);
-        temp_gridy(1) = min(temp_cols); 
-        temp_gridx(2) = max(temp_rows);
-        temp_gridy(2) = max(temp_cols); 
-        DICpara.gridxyROIRange.gridx = temp_gridx;
-        DICpara.gridxyROIRange.gridy = temp_gridy;
-    end
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Localize DICpara for the current camera + frame.
+    % Caller builds DICpara using the LEFT camera's frame-1 mask and ROI
+    % (see setDICParas_STAQ). When processing the right camera or a
+    % later incremental-mode frame, the effective reference mask and ROI
+    % are different; we localize them here.
+    %
+    % MATLAB passes structs by value, so this mutation is scoped to this
+    % function call — it does NOT leak back to the caller's DICpara.
+    DICpara = localizeDICparaForFrame(DICpara, fNormalizedMask, camera0OrNot);
 
     if DICpara.showImgOrNot
         figure;
@@ -495,6 +488,32 @@ end
 
 end  % for ImgSeqNum
 end  % function
+
+
+% -----------------------------------------------------------------------
+% Local helpers
+% -----------------------------------------------------------------------
+
+function DICpara = localizeDICparaForFrame(DICpara, fNormalizedMask, camera0OrNot)
+%LOCALIZEDICPARAFORFRAME  Patch DICpara for the current camera + frame.
+%
+%   Replaces DICpara.ImgRefMask with the current frame's mask so that
+%   downstream functions (IntegerSearchQuadtree, GenerateQuadtreeMesh,
+%   LocalICGNQuadtree) see the right reference silhouette.
+%
+%   For the right camera, additionally recomputes the ROI bounding box
+%   from the mask, since the DICpara gridxyROIRange shipped in is from
+%   the left camera's frame-1 mask (see setDICParas_STAQ).
+
+DICpara.ImgRefMask = fNormalizedMask;
+
+if strcmp(camera0OrNot, 'notCamera0')
+    [rowsInMask, colsInMask] = find(fNormalizedMask);
+    DICpara.gridxyROIRange.gridx = [min(rowsInMask), max(rowsInMask)];
+    DICpara.gridxyROIRange.gridy = [min(colsInMask), max(colsInMask)];
+end
+
+end
 
 
 
