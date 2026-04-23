@@ -6,7 +6,14 @@ function DICpara = setDICParas_IncOrNot(numImages)
 %   fields are filled by setDICParas_STAQ.
 
 if numImages > 2
-    IncrementalOrNot = funParaInput('IncrementalOrNot');
+    % Guard: skip prompt if DICIncOrNot has already been set by caller
+    % (MATLAB quirk: this function has no DICpara input, so preset must
+    % come from a base-workspace DICpara; we check via evalin).
+    try
+        IncrementalOrNot = evalin('base', 'DICpara.DICIncOrNot');
+    catch
+        IncrementalOrNot = funParaInput('IncrementalOrNot');
+    end
     switch IncrementalOrNot
         case 0  % accumulative (default)
             ImgSeqIncUnit = numImages + 1;

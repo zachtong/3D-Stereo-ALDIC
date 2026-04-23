@@ -15,18 +15,22 @@ end
 
 
 
-% Choose subset size
-fprintf('\n');
-fprintf('--- What is the subset size? --- \n');
-fprintf('Each subset has an area of [-winsize/2:winsize/2, -winsize/2:winsize/2] \n');
-prompt = 'Input an even number: ';
-winsize = input(prompt);
+% Subset size
+if isfield(DICpara, 'winsize') && ~isempty(DICpara.winsize)
+    winsize = DICpara.winsize;
+else
+    fprintf('\n--- What is the subset size? ---\n');
+    fprintf('Each subset has an area of [-winsize/2:winsize/2, -winsize/2:winsize/2]\n');
+    winsize = input('Input an even number: ');
+end
 
-% Choose subset size
-fprintf('--- What is the subset step? --- \n');
-prompt = 'Input an integer to be a power of 2 (E.g., 16): ';
-winstepsize = input(prompt);
-
+% Subset step
+if isfield(DICpara, 'winstepsize') && ~isempty(DICpara.winstepsize)
+    winstepsize = DICpara.winstepsize;
+else
+    fprintf('--- What is the subset step? ---\n');
+    winstepsize = input('Input an integer to be a power of 2 (E.g., 16): ');
+end
 
 % ==============================================
 % Subproblem 2 solver: only FEM is supported in the quadtree path
@@ -34,11 +38,19 @@ Subpb2FDOrFEM = 1;
 
 % ==============================================
 % Parallel cluster #
-ClusterNo = funParaInput('ClusterNo'); % Assign parpool cluster No
+if isfield(DICpara, 'ClusterNo') && ~isempty(DICpara.ClusterNo)
+    ClusterNo = DICpara.ClusterNo;
+else
+    ClusterNo = funParaInput('ClusterNo');
+end
 
 
 % ==============================================
-winsizeMin = funParaInput('winsizeMin'); % Assign the finest element size in the quadtree mesh
+if isfield(DICpara, 'winsizeMin') && ~isempty(DICpara.winsizeMin)
+    winsizeMin = DICpara.winsizeMin;
+else
+    winsizeMin = funParaInput('winsizeMin');
+end
 DICpara.winsizeMin = winsizeMin;
 
 

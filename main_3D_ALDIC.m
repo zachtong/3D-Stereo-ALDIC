@@ -119,7 +119,11 @@ DICpara.ImgRefMask = double(maskLeft{1});
 
 %% Section 3.1 Stereo Calibration
 sectionBanner(3, 'Stereo calibration & matching');
-calib_method = funParaInput('CalibrationMethod');
+if isfield(DICpara, 'calibrationMethod') && ~isempty(DICpara.calibrationMethod)
+    calib_method = DICpara.calibrationMethod;
+else
+    calib_method = funParaInput('CalibrationMethod');
+end
 switch calib_method
     case 0
         % Install Computer Vision Toolbox and use the Stereo Camera
@@ -206,10 +210,14 @@ DICpara.DoYouWantToSmoothOnceMore = 0;
 DICpara.StrainType = 0;
 
 % ------ Choose image to plot (first only, second and next images) ------
-DICpara.Image2PlotResults = funParaInput('Image2PlotResults');
+if ~isfield(DICpara, 'Image2PlotResults') || isempty(DICpara.Image2PlotResults)
+    DICpara.Image2PlotResults = funParaInput('Image2PlotResults');
+end
 
 % ------ Save fig format ------
-DICpara.MethodToSaveFig = funParaInput('SaveFigFormat');
+if ~isfield(DICpara, 'MethodToSaveFig') || isempty(DICpara.MethodToSaveFig)
+    DICpara.MethodToSaveFig = funParaInput('SaveFigFormat');
+end
 
 % ------ Choose overlay image transparency ------
 DICpara.OrigDICImgTransparency = 1;
@@ -219,7 +227,9 @@ end
 
 %--------- Transform the disp. to other coor. sys.?---------
 RotationMatrix = [1 0 0; 0 1 0; 0 0 1]; TranslationMatrix = [0 0 0];
-DICpara.transformDisp = funParaInput('TransformDispOrNot');
+if ~isfield(DICpara, 'transformDisp') || isempty(DICpara.transformDisp)
+    DICpara.transformDisp = funParaInput('TransformDispOrNot');
+end
 if DICpara.transformDisp == 1
     Base_Points2D = getBasePoints(imageLeft{1,1}',maskLeft{1,1}');
     [RotationMatrix,TranslationMatrix] = GetRTMatrix( RD_L.ResultFEMeshEachFrame{1,1}.coordinatesFEM, Base_Points2D, FinalResult.Coordinates(1,:));
@@ -228,9 +238,13 @@ if DICpara.transformDisp == 1
 end
 
 
-% ------ Strain window size ------
-prompt = 'What is your strain size? e.g. 3,5,7...\nInput: ';
-strain_size = input(prompt);
+% ------ Strain window size (prompt unless preset) ------
+if isfield(DICpara, 'strain_size') && ~isempty(DICpara.strain_size)
+    strain_size = DICpara.strain_size;
+else
+    strain_size = input('What is your strain size? e.g. 3,5,7...\nInput: ');
+    DICpara.strain_size = strain_size;
+end
 strain_length = (strain_size-1) * DICpara.winstepsize + 1;
 VSG_length = strain_length + DICpara.winsize;
 fprintf('Your strain size is %d * %d (Unit: Calculated Points) \nYour VSG size is %d * %d (Unit: Pixel) \n', strain_size,strain_size,VSG_length,VSG_length);
