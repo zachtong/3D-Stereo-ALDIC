@@ -7,9 +7,6 @@ T_left = [0 0 0]'; % Set left Camera Coordinate as World Coordinate
 R_right = cameraParams.rotationMatrix;
 T_right = cameraParams.translationVector';
 
-% Compute the fundamental and essential matrices.
-% [F, E] = computeFundamentalEssentialMatrix(K_left, K_right, R_left, T_left, R_right, T_right);
-
 %% Triangulate to reconstruct 3D points for each frame.
 % Undistort points before doing 3D reconstruction
 [matchedPairs_undistort]= funUndistortPoints(matchedPairs,cameraParams);
@@ -33,27 +30,31 @@ end
 
 end
 
-function [F, E] = computeFundamentalEssentialMatrix(K_left, K_right, R_left, T_left, R_right, T_right)
-% Compute the essential matrix.
-E = K_right' * skewSymmetric(T_right - T_left) * R_right' * R_left * K_left;
-% Compute the fundamental matrix.
-F = inv(K_right)' * E * inv(K_left);
-end
-
 
 function [points3D,reprojectionErrors] = triangulatePoints(matchedPairs, K_left, K_right, R_left, T_left, R_right, T_right)
 % Purpose: Use the matched pixel pairs, fundamental matrix, and camera parameters to triangulate and reconstruct 3D points.
+% Handles NaN points from unconverged ICGN subsets.
 P_left = K_left * [R_left, T_left];
 P_right = K_right * [R_right, T_right];
 points3D = cell(size(matchedPairs,1),1);
 reprojectionErrors = cell(size(matchedPairs,1),1);
     for i = 1:size(matchedPairs,1)
-        [points3D{i,1},reprojectionErrors{i}]= triangulate(matchedPairs{i,1}(:, 1:2), matchedPairs{i,1}(:, 3:4), P_left, P_right);
+        pts = matchedPairs{i,1};
+        nPts = size(pts, 1);
+        finiteIdx = all(isfinite(pts), 2);
+
+        % Initialize with NaN
+        points3D{i,1} = NaN(nPts, 3);
+        reprojectionErrors{i} = NaN(nPts, 1);
+
+        if any(finiteIdx)
+            [pts3D_finite, reprErr_finite] = triangulate( ...
+                pts(finiteIdx, 1:2), pts(finiteIdx, 3:4), P_left, P_right);
+            points3D{i,1}(finiteIdx, :) = pts3D_finite;
+            reprojectionErrors{i}(finiteIdx) = reprErr_finite;
+        end
+
+        % Per-frame summary (silent)
     end
 
-end
-
-
-function S = skewSymmetric(v)
-S = [0, -v(3), v(2); v(3), 0, -v(1); -v(2), v(1), 0];
 end

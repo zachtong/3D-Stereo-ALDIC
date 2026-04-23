@@ -24,7 +24,7 @@ switch paraName
         fprintf('    2: Yin_Calibrator format\n');
         fprintf('    3: DICe format\n');
         fprintf('    4: OpenCorr format\n');
-        prompt = 'Input here: '; IncrementalOrNot = input(prompt); paraInput = IncrementalOrNot;
+        prompt = 'Input here: '; paraInput = input(prompt);
         fprintf('\n');
 
     case 'IncrementalOrNot' % Incremental mode or not
@@ -155,7 +155,7 @@ switch paraName
             disp('****** Wrong input! ******')
             fprintf('Infinitesimal strain or finite strain? \n');
             fprintf('    0: Infinitesimal strain; \n');
-            fprintf('    1: Eluerian strain; \n');
+            fprintf('    1: Eulerian strain; \n');
             fprintf('    2: Green-Lagrangian strain; \n');
             fprintf('    3: Others: code by yourself; \n');
             prompt = 'Input here: ';
@@ -216,18 +216,6 @@ switch paraName
         prompt = 'Input here: '; TransformDispOrNot = input(prompt);
         paraInput = TransformDispOrNot;
         fprintf('------------------------------------- \n');
-
-
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %%%%% Section 9 %%%%%
-        % case 'MaterialModel' % Material model: plane stress or plane strain?
-        %     fprintf('Material model to compute Cauchy stress fields: \n');
-        %     fprintf('    1: Linear elasticity -- Plane stress \n');
-        %     fprintf('    2: Linear elasticity -- Plane strain \n');
-        %     fprintf('    3: Others: User needs to edit codes in ./plotFiles/Plotstress.m   \n');
-        %     prompt = 'Input here: '; MaterialModel = input(prompt);
-        %     paraInput = MaterialModel;
-        %     fprintf('------------------------------------- \n');
 
 
     otherwise

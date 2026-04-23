@@ -44,12 +44,7 @@ if nValid < 10
     end
 end
 
-% ====== Deal with incremental mode ======
-% RD_L.ResultFEMesh{1+floor(1/DICpara.ImgSeqIncUnit)} = ... % To save first mesh info
-%     struct( 'coordinatesFEM',DICmesh.coordinatesFEM,'elementsFEM',DICmesh.elementsFEM, ...
-%     'winsize',DICpara.winsize,'winstepsize',DICpara.winstepsize,'gridxyROIRange',DICpara.gridxyROIRange );
-
-% To save first Non-quadtree mesh info
+% Store first non-quadtree mesh info
 StereoInfo.ResultFEMesh = struct( 'coordinatesFEM',DICmesh.coordinatesFEM,'elementsFEM',DICmesh.elementsFEM, ...
     'winsize',DICpara.winsize,'winstepsize',DICpara.winstepsize,'gridxyROIRange',DICpara.gridxyROIRange );
 % ====== Generate a quadtree mesh considering sample's complex geometry ======
@@ -80,7 +75,7 @@ if stereoMatchShapeOrder == 1
     [U,~,~,~,~,~,~] = LocalICGNQuadtree(U0,DICmesh.coordinatesFEM,Df,...
         Normalized_L,Normalized_R,DICpara,'GaussNewton',tol,1);
 else
-    % ====== 2nd-order ICGN refinement  ======
+    % ====== 2nd-order ICGN refinement (not implemented — reserved) ======
     [U,~,~,~,~,~,~] = LocalICGNQuadtree(U0,DICmesh.coordinatesFEM,Df,...
         Normalized_L,Normalized_R,DICpara,'GaussNewton',tol,2);
 end
