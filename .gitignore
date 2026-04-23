@@ -1,6 +1,7 @@
 # MATLAB build artifacts
 *.asv
 *.slxc
+*.mex*
 slprj/
 
 # Private research and personal work
