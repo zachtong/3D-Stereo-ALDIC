@@ -100,9 +100,11 @@ DICpara.GaussPtOrder     = 2;
 %  3. Load images + masks
 %  ========================================
 example_dir = fullfile(project_root, 'examples', 'Stereo_DIC_Challenge_1.0_S3');
-img_dir     = fullfile(example_dir, 'Images_Stereo_Sample3_images');
-mask_dir    = fullfile(example_dir, 'Images_Stereo_Sample3_maskfiles');
-calib_file  = fullfile(example_dir, 'calibration_DICe.xml');
+img_left_dir   = fullfile(example_dir, 'Images_Stereo_Sample3_images',    'Left');
+img_right_dir  = fullfile(example_dir, 'Images_Stereo_Sample3_images',    'Right');
+mask_left_dir  = fullfile(example_dir, 'Images_Stereo_Sample3_maskfiles', 'Left');
+mask_right_dir = fullfile(example_dir, 'Images_Stereo_Sample3_maskfiles', 'Right');
+calib_file     = fullfile(example_dir, 'calibration_DICe.xml');
 
 frame_ids = {'0000', '0001', '0002'};
 nFrames = length(frame_ids);
@@ -117,12 +119,12 @@ fileNameRight = cell(2, nFrames);
 for i = 1:nFrames
     fn_L = sprintf('%s_0.tif', frame_ids{i});
     fn_R = sprintf('%s_1.tif', frame_ids{i});
-    imageLeft{i}  = double(imread(fullfile(img_dir, fn_L))');
-    imageRight{i} = double(imread(fullfile(img_dir, fn_R))');
-    maskLeft{i}   = (imread(fullfile(mask_dir, fn_L))' > 0);
-    maskRight{i}  = (imread(fullfile(mask_dir, fn_R))' > 0);
-    fileNameLeft{1, i}  = fn_L;  fileNameLeft{2, i}  = img_dir;
-    fileNameRight{1, i} = fn_R;  fileNameRight{2, i} = img_dir;
+    imageLeft{i}  = double(imread(fullfile(img_left_dir,  fn_L))');
+    imageRight{i} = double(imread(fullfile(img_right_dir, fn_R))');
+    maskLeft{i}   = (imread(fullfile(mask_left_dir,  fn_L))' > 0);
+    maskRight{i}  = (imread(fullfile(mask_right_dir, fn_R))' > 0);
+    fileNameLeft{1, i}  = fn_L;  fileNameLeft{2, i}  = img_left_dir;
+    fileNameRight{1, i} = fn_R;  fileNameRight{2, i} = img_right_dir;
 end
 
 DICpara.ImgRefMask = double(maskLeft{1});

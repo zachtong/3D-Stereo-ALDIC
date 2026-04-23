@@ -8,8 +8,11 @@ research/
 CLAUDE.md
 
 # Large data (>1 GB, kept on disk but not in git)
-Stereo_DIC_Challenge_*/
+/Stereo_DIC_Challenge_*/
 results/
+
+# Private / unreleased example datasets
+examples/pig_heart/
 
 # Test baseline (user-captured, machine-specific)
 tests/baseline/
