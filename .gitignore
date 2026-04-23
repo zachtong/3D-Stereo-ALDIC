@@ -6,6 +6,14 @@ slprj/
 # Private research and personal work
 research/
 CLAUDE.md
+README-ZachTong.md
+
+# Planning / design notes (kept local)
+docs/plans/
+
+# Experimental / one-off test scripts (kept local)
+tests/test_*.m
+tests/D_shape/
 
 # Large data (>1 GB, kept on disk but not in git)
 /Stereo_DIC_Challenge_*/
