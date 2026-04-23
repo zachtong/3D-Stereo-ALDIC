@@ -242,10 +242,15 @@ if UseGlobal
 
     % ======= ALStep 1 Subproblem 2: Global constraint =======
     % ------ Smooth displacements for a better F ------
-    DICpara.DispFilterSize=0; DICpara.DispFilterStd=0; DICpara.StrainFilterSize=0; DICpara.StrainFilterStd=0; LevelNo=1;
-    DICpara.DispSmoothness = 0; DICpara.StrainSmoothness = 0;
-    if DICpara.DispSmoothness>1e-6, USubpb1 = funSmoothDispQuadtree(USubpb1,DICmesh_quadtree,DICpara); end
-    % if DICpara.StrainSmoothness>1e-6, FSubpb1 = funSmoothStrainQuadtree(FSubpb1,DICmesh_quadtree,DICpara); end
+    % 2D smoothing inside ADMM, controlled by DICpara.Smooth2DTimes
+    % (0 = disabled, default). Filter size/std also come from DICpara.
+    if ~isfield(DICpara,'Smooth2DTimes') || isempty(DICpara.Smooth2DTimes)
+        DICpara.Smooth2DTimes = 0;
+    end
+    LevelNo = 1;
+    for smoothN = 1:DICpara.Smooth2DTimes
+        USubpb1 = funSmoothDispQuadtree(USubpb1,DICmesh_quadtree,DICpara);
+    end
 
     % ====== Define penalty parameter ======
     mu = 1e-3; udual = zeros(size(FSubpb1)); vdual = zeros(size(USubpb1));
@@ -337,7 +342,9 @@ if UseGlobal
         ALSub2Time(ALSolveStep) = toc;
 
         % ------- Optional smoothing --------
-        if DICpara.DispSmoothness>1e-6, USubpb2 = funSmoothDispQuadtree(USubpb2,DICmesh_quadtree,DICpara); end
+        for smoothN = 1:DICpara.Smooth2DTimes
+            USubpb2 = funSmoothDispQuadtree(USubpb2,DICmesh_quadtree,DICpara);
+        end
         % Preserve hole-edge displacements from Subpb1 (no global blur)
         for tempk=0:1, USubpb2(2*markCoordHoleStrain-tempk) = USubpb1(2*markCoordHoleStrain-tempk); end
 

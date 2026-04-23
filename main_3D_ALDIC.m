@@ -237,15 +237,23 @@ for ImgSeqNum = 2: length(imgNormalized_L)
     FullImageName_first   = fullfile(fileNameLeft{2,1}, fileNameLeft{1,1});
 
     % ------ Smooth displacements (post-ALDIC, 3D) ------
-    SmoothTimes = 0;
+    % DICpara.Smooth3DTimes: number of outer-loop passes of
+    % funSmoothDisp_Quadtree. 0 disables smoothing. Default is 3.
+    if ~isfield(DICpara,'Smooth3DTimes') || isempty(DICpara.Smooth3DTimes)
+        DICpara.Smooth3DTimes = 3;
+    end
     try
-        while DICpara.DoYouWantToSmoothOnceMore == 0 && SmoothTimes < 3
+        for SmoothTimes = 1:DICpara.Smooth3DTimes
             FinalResult.Displacement_smooth(ImgSeqNum,:) = funSmoothDisp_Quadtree( ...
                 FinalResult.Displacement(ImgSeqNum,:), ...
                 RD_L.ResultFEMeshEachFrame{1}, DICpara);
-            SmoothTimes = SmoothTimes + 1;
         end
     catch
+    end
+    if DICpara.Smooth3DTimes == 0
+        % Not smoothed: mirror raw into the _smooth slot so downstream
+        % consumers (PlaneFit3, plot) see a valid field.
+        FinalResult.Displacement_smooth(ImgSeqNum,:) = FinalResult.Displacement(ImgSeqNum,:);
     end
 
 
