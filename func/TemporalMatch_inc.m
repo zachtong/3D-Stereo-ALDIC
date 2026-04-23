@@ -399,7 +399,7 @@ for ImgSeqNum = 2 : length(ImgNormalized)
         % interpolating
         tempResultDisp(1,:) = rbfinterp(RD.CoorEachFrame{ImgSeqNum-2,1}',rbfInterpX);
         tempResultDisp(2,:) = rbfinterp(RD.CoorEachFrame{ImgSeqNum-2,1}',rbfInterpY);
-        RD.ResultDisp_inc{ImgSeqNum-1,1} = RD.ResultDisp_inc{ImgSeqNum-2,1} + tempResultDisp'; % disp_inc 是相较于第一张ROI的位移
+        RD.ResultDisp_inc{ImgSeqNum-1,1} = RD.ResultDisp_inc{ImgSeqNum-2,1} + tempResultDisp'; % disp_inc accumulated relative to the first-frame ROI
         RD.CoorEachFrame{ImgSeqNum-1,1} = RD.ResultFEMesh{1, 1}.coordinatesFEM + RD.ResultDisp_inc{ImgSeqNum-1,1};
     end
 

@@ -447,7 +447,7 @@ switch incOrNot
                     deformed_pos_L = RD.ResultFEMeshEachFrame{1,1}.coordinatesFEM + RD.ResultDisp{ImgSeqNum-2,1}.U;
                     tempResultDisp(1,:) = Fi_X(deformed_pos_L(:,1), deformed_pos_L(:,2))';
                     tempResultDisp(2,:) = Fi_Y(deformed_pos_L(:,1), deformed_pos_L(:,2))';
-                    RD.ResultDisp{ImgSeqNum-1,1}.U = RD.ResultDisp{ImgSeqNum-2,1}.U  + tempResultDisp'; % disp_inc 是相较于最初第一张ROI的位移
+                    RD.ResultDisp{ImgSeqNum-1,1}.U = RD.ResultDisp{ImgSeqNum-2,1}.U  + tempResultDisp'; % disp_inc accumulated relative to the first-frame ROI
                 end
             case 'notCamera0'
                 tempX = RD.ResultDisp_inc{ImgSeqNum-1, 1}.U(1:2:end);
