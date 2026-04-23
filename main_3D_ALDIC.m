@@ -39,20 +39,43 @@
 % ===================================================================
 %% Section 1: Clear MATLAB environment & mex set up Spline interpolation
 close all; clear; clc; clearvars -global
-fprintf('------------ Section 1 Start ------------ \n')
-setenv('MW_MINGW64_LOC','C:\TDM-GCC-64');
-try
-    mex -O ba_interp2_spline.cpp;
-    warning('off');
-    fprintf('Mex compilation successful.\n');
-catch ME
-    fprintf('Mex compilation failed: %s\n', ME.message);
-    fprintf('Please check complier installation and path.\n');
+session_start = tic;
+numSections = 6;
+sectionBanner = @(n, name) fprintf('\n==== Section %d/%d: %s  |  elapsed: %.1fs ====\n', ...
+    n, numSections, name, toc(session_start));
+sectionBanner(1, 'Environment & mex setup');
+
+% Set MW_MINGW64_LOC only if not already set and the default path exists.
+if isempty(getenv('MW_MINGW64_LOC'))
+    default_mingw = 'C:\TDM-GCC-64';
+    if exist(default_mingw, 'dir')
+        setenv('MW_MINGW64_LOC', default_mingw);
+    else
+        warning('MW_MINGW64_LOC not set and %s does not exist. Set this env var to your MinGW install path if mex compilation fails.', default_mingw);
+    end
+end
+
+% Skip mex rebuild if binary is up-to-date (unless DICpara.forceMexRebuild).
+mex_src = 'ba_interp2_spline.cpp';
+mex_bin = ['ba_interp2_spline.', mexext];
+forceRebuild = exist('DICpara','var') && isfield(DICpara,'forceMexRebuild') && DICpara.forceMexRebuild;
+needRebuild = forceRebuild || ~exist(mex_bin, 'file') || ...
+              (dir(mex_src).datenum > dir(mex_bin).datenum);
+if needRebuild
+    try
+        mex('-O', mex_src);
+        warning('off');
+        fprintf('Mex compilation successful.\n');
+    catch ME
+        fprintf('Mex compilation failed: %s\n', ME.message);
+        fprintf('Please check compiler installation and path.\n');
+    end
+else
+    fprintf('Mex binary up-to-date; skipping rebuild.\n');
 end
 
 addpath("./examples","./func",'./func_quadtree/rbfinterp/','./plotFiles/','./func_quadtree','./func_quadtree/refinement','./plotFiles/export_fig-d966721/');
 % TODO: addpath("./YOUR IMAGE FOLDER");
-fprintf('------------ Section 1 Done ------------ \n \n')
 
 %% Section 2: Load DIC parameters and set up DIC parameters
 %-------- Notes ----------------
@@ -61,7 +84,7 @@ fprintf('------------ Section 1 Done ------------ \n \n')
 % Incremental mode needs all updated masks
 % Accumulative mode needs only first mask
 %-------------------------------
-fprintf('------------ Section 2 Start ------------ \n')
+sectionBanner(2, 'Load images & DIC parameters');
 % ====== Read images and masks ======
 % Load DIC raw images
 [fileNameLeft, fileNameRight, imageLeft,imageRight, LoadImgMethod] = ReadImage3DStereo_STAQ;
@@ -112,9 +135,8 @@ end
 
 DICpara.ImgRefMask = double(maskLeft{1});
 
-fprintf('------------ Section 2 Done ------------ \n \n')
-
 %% Section 3.1 Stereo Calibration
+sectionBanner(3, 'Stereo calibration & matching');
 calib_method = funParaInput('CalibrationMethod');
 switch calib_method
     case 0
@@ -157,6 +179,7 @@ if isfield(DICpara, 'verifyStereoReconstruction') && DICpara.verifyStereoReconst
 end
 
 %% Section 4 Temporal Matching
+sectionBanner(4, 'Temporal matching');
 % Only 1st-order shape function is implemented; 2nd-order path not supported.
 shapeFuncOrder = 1;
 
@@ -167,6 +190,7 @@ RD_L = TemporalMatch_quadtree_ST1(DICpara, fileNameLeft,maskLeft,imgNormalized_L
 RD_R = TemporalMatch_quadtree_ST1(DICpara,fileNameRight,maskRight,imgNormalized_R,RD_R,StereoInfo, 'notCamera0',shapeFuncOrder);
 
 %% Section 5 3D-Result
+sectionBanner(5, '3D reconstruction');
 % Obtain the matched 2D point pairs from the left and right images
 matchedPairs = organizeMatchedPairds_quadtree_ST1(RD_L,RD_R,DICpara);
 % Calculate the 3D coordinates
@@ -177,15 +201,21 @@ check3DReconstructionResults(reprojectionErrors, FinalResult, RD_L,13);
 
 %% Section 6: Compute strains/ Plot disp. and strains
 close all;
-fprintf('------------ Section 6 Start ------------ \n')
+sectionBanner(6, 'Strain & visualization');
 % -------------------------------------------------------------------
 % This section computes strain fields and plots disp and strain results.
 % -------------------------------------------------------------------
 % ------ Convert units from pixels to the physical world ------
 DICpara.um2px = 1;
 
-% Image save path
-DICpara.outputFilePath = [];
+% Image save path: default to ./results/<timestamp>/ unless preset.
+if ~isfield(DICpara, 'outputFilePath') || isempty(DICpara.outputFilePath)
+    DICpara.outputFilePath = fullfile('.', 'results', char(datetime('now', 'Format', 'yyyyMMdd_HHmmss')));
+end
+if ~exist(DICpara.outputFilePath, 'dir')
+    mkdir(DICpara.outputFilePath);
+end
+fprintf('Output folder: %s\n', DICpara.outputFilePath);
 
 % ------ Smooth displacements ------
 DICpara.DoYouWantToSmoothOnceMore = 0;
@@ -319,4 +349,4 @@ for ImgSeqNum = 2: length(imgNormalized_L)
 
 end
 
-fprintf('------------ Section 6 Done ------------ \n \n')
+fprintf('\n==== ALL DONE  |  total elapsed: %.1fs ====\n', toc(session_start));

@@ -5,9 +5,12 @@ function [RD] = TemporalMatch_quadtree_ST1(DICpara,file_name,ImgMask,ImgNormaliz
 %
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% debug options
-UseGlobal = 1; % 0=Local DIC only (fast), 1=ALDIC with global constraints
-DICpara.showImgOrNot = 0;  % Set to 1 for debugging, 0 for batch processing
+% Runtime switches sourced from DICpara with safe defaults:
+%   UseGlobal       - run ADMM global step (true = full ALDIC, false = Local only)
+%   showImgOrNot    - debug figures inside this function (batch runs: 0)
+if ~isfield(DICpara,'UseGlobal') || isempty(DICpara.UseGlobal), DICpara.UseGlobal = true; end
+if ~isfield(DICpara,'showImgOrNot') || isempty(DICpara.showImgOrNot), DICpara.showImgOrNot = 0; end
+UseGlobal = logical(DICpara.UseGlobal);
 
 % Auto-enable parallel computing if Parallel Computing Toolbox available
 if DICpara.ClusterNo <= 1
@@ -92,8 +95,6 @@ for ImgSeqNum = 2 : imageNum
             % Fall back to FFT search if previous result unavailable
         end
     end
-
-    DICpara.NewFFTSearch = 1;
 
     if ImgSeqNum <=ImgStartDataDrivenMode || DICpara.NewFFTSearch == 1
         if useFFTSearch
