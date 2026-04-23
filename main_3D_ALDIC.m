@@ -45,36 +45,13 @@ sectionBanner = @(n, name) fprintf('\n==== Section %d/%d: %s  |  elapsed: %.1fs 
     n, numSections, name, toc(session_start));
 sectionBanner(1, 'Environment & mex setup');
 
-% Set MW_MINGW64_LOC only if not already set and the default path exists.
-if isempty(getenv('MW_MINGW64_LOC'))
-    default_mingw = 'C:\TDM-GCC-64';
-    if exist(default_mingw, 'dir')
-        setenv('MW_MINGW64_LOC', default_mingw);
-    else
-        warning('MW_MINGW64_LOC not set and %s does not exist. Set this env var to your MinGW install path if mex compilation fails.', default_mingw);
-    end
-end
-
-% Skip mex rebuild if binary is up-to-date (unless DICpara.forceMexRebuild).
-mex_src = 'ba_interp2_spline.cpp';
-mex_bin = ['ba_interp2_spline.', mexext];
-forceRebuild = exist('DICpara','var') && isfield(DICpara,'forceMexRebuild') && DICpara.forceMexRebuild;
-needRebuild = forceRebuild || ~exist(mex_bin, 'file') || ...
-              (dir(mex_src).datenum > dir(mex_bin).datenum);
-if needRebuild
-    try
-        mex('-O', mex_src);
-        warning('off');
-        fprintf('Mex compilation successful.\n');
-    catch ME
-        fprintf('Mex compilation failed: %s\n', ME.message);
-        fprintf('Please check compiler installation and path.\n');
-    end
-else
-    fprintf('Mex binary up-to-date; skipping rebuild.\n');
-end
-
+% Add core paths BEFORE calling the mex helper (which lives in func/).
 addpath("./examples","./func",'./func_quadtree/rbfinterp/','./plotFiles/','./func_quadtree','./func_quadtree/refinement','./plotFiles/export_fig-d966721/');
+
+% Compile ba_interp2_spline if missing/stale; prints actionable help
+% and errors out if no C++ compiler is available.
+forceRebuild = exist('DICpara','var') && isfield(DICpara,'forceMexRebuild') && DICpara.forceMexRebuild;
+ensureMexCompiled(forceRebuild);
 % TODO: addpath("./YOUR IMAGE FOLDER");
 
 %% Section 2: Load DIC parameters and set up DIC parameters

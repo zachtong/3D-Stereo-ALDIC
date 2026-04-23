@@ -14,26 +14,13 @@ function run_stereo_aldic_gui()
 %% ============ Environment setup ============
 sessionStart = tic;
 
-if isempty(getenv('MW_MINGW64_LOC'))
-    default_mingw = 'C:\TDM-GCC-64';
-    if exist(default_mingw, 'dir')
-        setenv('MW_MINGW64_LOC', default_mingw);
-    end
-end
-
-mex_src = 'ba_interp2_spline.cpp';
-mex_bin = ['ba_interp2_spline.', mexext];
-if ~exist(mex_bin, 'file') || (dir(mex_src).datenum > dir(mex_bin).datenum)
-    try
-        mex('-O', mex_src);
-    catch ME
-        warning('Mex compile failed: %s', ME.message);
-    end
-end
-
 addpath('./examples', './func', './func_quadtree/rbfinterp/', ...
         './plotFiles/', './func_quadtree', './func_quadtree/refinement', ...
         './plotFiles/export_fig-d966721/', './gui');
+
+% Compile ba_interp2_spline if missing/stale; prints actionable help
+% and errors out if no C++ compiler is available.
+ensureMexCompiled();
 
 %% ============ State container ============
 state.DICpara    = setDICparaDefaults();
