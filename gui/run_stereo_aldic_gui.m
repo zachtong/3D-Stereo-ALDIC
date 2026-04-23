@@ -165,6 +165,12 @@ hViz.exportBtn.ButtonPushedFcn   = @(~,~) onExportCSV();
         DICpara.UseGlobal          = hCfg.useGlobal.Value;
         DICpara.StereoSearchDistance   = hCfg.stereoSearch.Value;   % scalar -> square
         DICpara.TemporalSearchDistance = hCfg.temporalSearch.Value;
+        % Inc mode forces 'fft' regardless of the dropdown value.
+        if DICpara.DICIncOrNot == 1
+            DICpara.TemporalInitGuess = 'fft';
+        else
+            DICpara.TemporalInitGuess = hCfg.temporalInitDD.Value;
+        end
 
         % Strain
         DICpara.strain_size    = hCfg.strainSize.Value;
@@ -395,7 +401,7 @@ end  % main function
 % ============================================================
 function h = buildConfigTab(parent, p)
 mainGrid = uigridlayout(parent, [6 1]);
-mainGrid.RowHeight = {245, 175, 105, 140, 'fit', 40};
+mainGrid.RowHeight = {245, 205, 105, 140, 'fit', 40};
 mainGrid.RowSpacing = 8; mainGrid.Padding = [14 14 14 14];
 mainGrid.Scrollable = 'on';
 
@@ -432,9 +438,9 @@ h.drawROIBtn   = uibutton(calExtraBtns, 'push', 'Text', 'Draw ROI');
 
 % --- DIC ---
 panel2 = uipanel(mainGrid, 'Title', '2. DIC parameters', 'FontWeight', 'bold');
-g2 = uigridlayout(panel2, [4 4]);
+g2 = uigridlayout(panel2, [5 4]);
 g2.ColumnWidth = {220, 90, 220, 90};
-g2.RowHeight = repmat({28}, 1, 4);
+g2.RowHeight = repmat({28}, 1, 5);
 
 uilabel(g2, 'Text', 'Subset size (winsize, px):');
 h.winsize = uispinner(g2, 'Value', valOr(p,'winsize',32), 'Limits', [4 512], 'Step', 2);
@@ -462,6 +468,15 @@ h.temporalSearch.Tooltip = 'Square search radius for frame-to-frame match. Set l
 
 uilabel(g2, 'Text', 'Use ALDIC global step:');
 h.useGlobal = uicheckbox(g2, 'Text', '', 'Value', valOr(p,'UseGlobal',true));
+
+uilabel(g2, 'Text', 'Temporal initial guess:');
+h.temporalInitDD = uidropdown(g2, ...
+    'Items', {'Per-frame FFT', 'Reuse previous frame (acc only)'}, ...
+    'ItemsData', {'fft', 'reuseLast'}, ...
+    'Value', strOr(p, 'TemporalInitGuess', 'fft'));
+h.temporalInitDD.Tooltip = ['FFT: run full FFT cross-correlation every frame (safest). ', ...
+    'Reuse: use previous cumulative displacement as initial guess (faster, acc mode only). ', ...
+    'Inc mode forces FFT regardless of this setting.'];
 
 % --- Strain ---
 panel3 = uipanel(mainGrid, 'Title', '3. Strain & smoothing', 'FontWeight', 'bold');
@@ -523,7 +538,7 @@ end
 % ============================================================
 function h = buildVisualizeTab(parent)
 g = uigridlayout(parent, [2 2]);
-g.RowHeight    = {'1x', 120};
+g.RowHeight    = {'1x', 200};    % 200 (was 120) to fit 3 rows of sliders
 g.ColumnWidth  = {'1x', 280};
 g.Padding      = [10 10 10 10];
 
@@ -536,7 +551,7 @@ controlPanel = uipanel(g, 'Title', 'View controls');
 controlPanel.Layout.Row = 2; controlPanel.Layout.Column = [1 2];
 cg = uigridlayout(controlPanel, [3 6]);
 cg.ColumnWidth = {90, 140, 90, '1x', 90, 120};
-cg.RowHeight   = {28, 28, 28};
+cg.RowHeight   = {40, 40, 40};   % 40 per row (was 28) so uislider ticks show
 
 % Variable + background
 uilabel(cg, 'Text', 'Variable:');

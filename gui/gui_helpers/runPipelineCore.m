@@ -202,8 +202,14 @@ end
 
 %% 8. Save
 progressFcn(0.99, 'Saving FinalResult.mat...');
+% Save everything the Visualize tab needs to re-render without re-running
+% the pipeline: 3D results + all camera data + meshes + strain components +
+% raw plane-fit coefficients + image paths (needed to reload background images).
 save(fullfile(DICpara.outputFilePath, 'FinalResult.mat'), ...
-     'FinalResult', 'DICpara', 'RD_L', 'RD_R', 'StereoInfo', '-v7.3');
+     'FinalResult', 'DICpara', 'RD_L', 'RD_R', 'StereoInfo', ...
+     'coefficientsPerFrame', 'strainPerFrame', ...
+     'fileNameLeft', 'fileNameRight', ...
+     '-v7.3');
 logFcn(sprintf('Saved FinalResult.mat to %s', DICpara.outputFilePath));
 
 progressFcn(1.0, 'Done');

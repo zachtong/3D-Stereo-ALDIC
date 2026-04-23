@@ -75,13 +75,29 @@ for ImgSeqNum = 2 : imageNum
     %% Section 3: Compute an initial guess of the unknown displacement field
     % Section 3: Initial guess
 
-    % Decide FFT search strategy for initial guess
+    % Decide FFT search strategy for initial guess.
+    %
+    % DICpara.TemporalInitGuess is user-controlled:
+    %   'fft'        - run FFT cross-correlation every frame (default,
+    %                  safest; always used in incremental mode)
+    %   'reuseLast'  - use previous-frame cumulative displacement as the
+    %                  initial guess (accumulative mode only; saves ~1s
+    %                  per frame; assumes inter-frame motion is small)
+    %
+    % Inc mode always does FFT because each inc step is already small —
+    % the savings from propagation don't justify the risk.
     useFFTSearch = true;
-    if incOrNot == 1 && ImgSeqNum >= 3
+    prevDispForSeed = []; prevCoordsForSeed = [];
+    reuseRequested = isfield(DICpara,'TemporalInitGuess') && ...
+                     strcmpi(DICpara.TemporalInitGuess, 'reuseLast');
+    if incOrNot == 0 && reuseRequested && ImgSeqNum >= 3
         try
-            prevDisp = RD.ResultDisp_inc{ImgSeqNum-2, 1}.U;  % [2N_prev x 1]
-            prevCoords = RD.ResultFEMeshEachFrame{ImgSeqNum-2, 1}.coordinatesFEM;  % [N_prev x 2]
-            prevU_x = prevDisp(1:2:end); prevU_y = prevDisp(2:2:end);
+            % Acc mode: reuse previous frame's cumulative left displacement.
+            % RD.ResultDisp{k,1}.U is an N x 2 matrix for acc (camera0).
+            prevDispForSeed   = RD.ResultDisp{ImgSeqNum-2, 1}.U;
+            prevCoordsForSeed = RD.ResultFEMeshEachFrame{1, 1}.coordinatesFEM;
+            prevU_x = prevDispForSeed(:,1);
+            prevU_y = prevDispForSeed(:,2);
             validFrac = 1 - nnz(isnan(prevU_x)) / numel(prevU_x);
             if validFrac > 0.5, useFFTSearch = false; end
         catch
@@ -106,9 +122,9 @@ for ImgSeqNum = 2 : imageNum
 
             % Interpolate previous frame's displacement to current grid
             prevNonNan = ~isnan(prevU_x);
-            Fi_u = scatteredInterpolant(prevCoords(prevNonNan,1), prevCoords(prevNonNan,2), ...
+            Fi_u = scatteredInterpolant(prevCoordsForSeed(prevNonNan,1), prevCoordsForSeed(prevNonNan,2), ...
                 prevU_x(prevNonNan), 'natural', 'none');
-            Fi_v = scatteredInterpolant(prevCoords(prevNonNan,1), prevCoords(prevNonNan,2), ...
+            Fi_v = scatteredInterpolant(prevCoordsForSeed(prevNonNan,1), prevCoordsForSeed(prevNonNan,2), ...
                 prevU_y(prevNonNan), 'natural', 'none');
             u = reshape(Fi_u(x0temp(:), y0temp(:)), size(x0temp));
             v = reshape(Fi_v(x0temp(:), y0temp(:)), size(x0temp));

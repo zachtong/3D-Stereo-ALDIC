@@ -38,6 +38,10 @@ DICpara.ClusterNo            = 1;       % parpool size; 1 = serial
 % ---------------------------------------------------------------------
 DICpara.StereoSearchDistance   = [];    % for stereo matching (frame 1, ImgSeqNum = -1)
 DICpara.TemporalSearchDistance = [];    % for temporal matching (frames >= 2)
+DICpara.TemporalInitGuess      = 'fft'; % 'fft' (per-frame FFT search) or 'reuseLast'
+                                        % (use previous-frame cumulative disp as
+                                        % initial guess, ACC mode only; inc mode
+                                        % forces 'fft').
 DICpara.NewFFTSearchDistance   = [];    % legacy fallback (used by either if specific is empty)
 DICpara.fixSearchDistanceOrNot = 0;     % 0 = reuse preset for all frames, 1 = re-prompt per frame
 
