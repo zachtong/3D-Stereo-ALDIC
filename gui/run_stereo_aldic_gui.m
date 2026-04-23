@@ -40,6 +40,7 @@ state.DICpara    = setDICparaDefaults();
 state.results    = [];          % filled after Run
 state.isRunning  = false;
 state.logLines   = {};
+state.manualROI  = [];          % populated only if user clicks 'Draw ROI'
 
 %% ============ Main figure + tabs ============
 fig = uifigure('Name', '3D-Stereo-ALDIC', 'Position', [120 80 1100 820]);
