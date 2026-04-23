@@ -16,7 +16,7 @@ function [DICmesh,DICpara,U0] = GenerateQuadtreeMesh(U0,Df,fNormalizedMask,DICme
 % ==============================================
 
 
-disp('--- Generate a quadtree mesh ---')
+% disp('--- Generate a quadtree mesh ---')
 %% ====== Remove finite elements where there is a hole ======
 coordinatesFEMQuadtree = DICmesh.coordinatesFEM;
 elementsFEMQuadtree = DICmesh.elementsFEM(:,1:4);
@@ -108,7 +108,8 @@ markEleHoleEdge4 =  union(row4,union(row3,union(row2,union(row1,markEleRefine4))
 markCoordHoleEdge = unique(elementsFEMQuadtree(markEleHoleEdge4,:));
 try
     if markCoordHoleEdge(1)==0, markCoordHoleEdge = markCoordHoleEdge(2:end); end
-catch
+catch ME
+    warning('%s: %s', ME.identifier, ME.message);
 end
 
 %%%%%% New codes: Find elements near marked elements %%%%%%
@@ -123,7 +124,8 @@ for tempi = 1:2 % 2+(round( 32 / mean(DICpara.winstepsize) )^2)
     markCoordHoleEdge = unique(elementsFEMQuadtree(markEleHoleEdgeNeigh4,:)) ;
     try
         if markCoordHoleEdge(1) == 0, markCoordHoleEdge = markCoordHoleEdge(2:end); end
-    catch
+    catch ME
+        warning('%s: %s', ME.identifier, ME.message);
     end
     
 end
@@ -135,70 +137,40 @@ DICmesh.dirichlet = DICmesh.markCoordHoleEdge;
  
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % %%%%% Plot %%%%%
-figure; 
-patch('Faces', elementsFEMQuadtree(:,1:4), 'Vertices', coordinatesFEMQuadtree, 'Facecolor','white','linewidth',1);
-patch('Faces', elementsFEMQuadtree(markEleHoleEdge4,1:4), 'Vertices', coordinatesFEMQuadtree, 'Facecolor','yellow','linewidth',1);
-hold on; patch('Faces', elementsFEMQuadtree(markEleHoleEdgeNeigh4,1:4), 'Vertices', coordinatesFEMQuadtree, 'Facecolor','yellow','linewidth',1);
-axis equal; axis tight; set(gca,'fontsize',18); set(gcf,'color','w'); box on;
-xlabel('$x$ (pixels)','Interpreter','latex'); ylabel('$y$ (pixels)','Interpreter','latex');
-title('Quadtree mesh','Interpreter','latex');
-a = gca; a.TickLabelInterpreter = 'latex';
-
-lgd = legend('Quadtree mesh elements','Elements near the edge','interpreter','latex','location','northeastoutside');
-set(lgd,'fontsize',13);
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  Zach
-ax = gca;
-ax.TickDir = 'none';
-ax.XAxis.Visible = "off";
-ax.YAxis.Visible = "off";
-box off;
-%% Initialize variable U for the generated quadtree mesh
-U0NotNanInd = find(~isnan(U0(1:2:end)));
-U0Quadtree = 0*coordinatesFEMQuadtree(:);
-
-dilatedI = ( imgaussfilt(double(Df.ImgRefMask),1) );
-dilatedI = logical( dilatedI > 0.01);
-cc = bwconncomp(dilatedI, 4);
-indPxAll = sub2ind( Df.imgSize, coordinatesFEMQuadtree(:,1), coordinatesFEMQuadtree(:,2) );
-indPxNotNanAll = sub2ind( Df.imgSize, DICmesh.coordinatesFEM(U0NotNanInd,1), DICmesh.coordinatesFEM(U0NotNanInd,2) );
-stats = regionprops(cc,'Area','PixelList');
-for tempi = 1:length(stats)
-    
-    try
-         
-        %%%%% Find those nodes %%%%%
-        indPxtempi = sub2ind( Df.imgSize, stats(tempi).PixelList(:,2), stats(tempi).PixelList(:,1) );
-        Lia = ismember(indPxAll,indPxtempi); [LiaList,~] = find(Lia==1);
-        Lib = ismember(indPxNotNanAll,indPxtempi); [LibList,~] = find(Lib==1);
-
-        %%%%% RBF (Radial basis function) works better than "scatteredInterpolant" %%%%%
-        % ------ Disp u ------
-        % fi1 = rbfsplit([DICmesh.coordinatesFEM(U0NotNanInd(LibList),1:2)],[U0(2*U0NotNanInd(LibList)-1)],[coordinatesFEMQuadtree(LiaList,1:2)],2000,10);
-        
-        op1 = rbfcreate( [DICmesh.coordinatesFEM(U0NotNanInd(LibList),1:2)]',[U0(2*U0NotNanInd(LibList)-1)]','RBFFunction', 'thinplate'); rbfcheck(op1);
-        fi1 = rbfinterp( [coordinatesFEMQuadtree(LiaList,1:2)]', op1);
-        U0Quadtree(2*LiaList-1) = fi1(:);
-
-        % ------ Disp v ------
-        % fi1 = rbfsplit([DICmesh.coordinatesFEM(U0NotNanInd(LibList),1:2)],[U0(2*U0NotNanInd(LibList))],[coordinatesFEMQuadtree(LiaList,1:2)],2000,10);
-
-        op1 = rbfcreate( [DICmesh.coordinatesFEM(U0NotNanInd(LibList),1:2)]',[U0(2*U0NotNanInd(LibList))]','RBFFunction', 'thinplate'); rbfcheck(op1);
-        fi1 = rbfinterp( [coordinatesFEMQuadtree(LiaList,1:2)]', op1);
-        U0Quadtree(2*LiaList) = fi1(:);
-       
-    catch
-    end
+if DICpara.showImgOrNot
+    figure;
+    patch('Faces', elementsFEMQuadtree(:,1:4), 'Vertices', coordinatesFEMQuadtree, 'Facecolor','white','linewidth',1);
+    patch('Faces', elementsFEMQuadtree(markEleHoleEdge4,1:4), 'Vertices', coordinatesFEMQuadtree, 'Facecolor','yellow','linewidth',1);
+    hold on; patch('Faces', elementsFEMQuadtree(markEleHoleEdgeNeigh4,1:4), 'Vertices', coordinatesFEMQuadtree, 'Facecolor','yellow','linewidth',1);
+    axis equal; axis tight; set(gca,'fontsize',18); set(gcf,'color','w'); box on;
+    xlabel('$x$ (pixels)','Interpreter','latex'); ylabel('$y$ (pixels)','Interpreter','latex');
+    title('Quadtree mesh','Interpreter','latex');
+    a = gca; a.TickLabelInterpreter = 'latex';
+    lgd = legend('Quadtree mesh elements','Elements near the edge','interpreter','latex','location','northeastoutside');
+    set(lgd,'fontsize',13);
+    ax = gca; ax.TickDir = 'none'; ax.XAxis.Visible = "off"; ax.YAxis.Visible = "off"; box off;
 end
+%% Initialize variable U for the generated quadtree mesh
+% Use scatteredInterpolant (O(N log N), numerically stable) instead of RBF (O(N^3), ill-conditioned)
+U0NotNanInd = find(~isnan(U0(1:2:end)));
 
-U0 = U0Quadtree;
+% Interpolate U0 to quadtree mesh
 
-% F_dispu = scatteredInterpolant( DICmesh.coordinatesFEM(U0NotNanInd,1),DICmesh.coordinatesFEM(U0NotNanInd,2),U0(2*U0NotNanInd-1),'linear','linear' );
-% F_dispv = scatteredInterpolant( DICmesh.coordinatesFEM(U0NotNanInd,1),DICmesh.coordinatesFEM(U0NotNanInd,2),U0(2*U0NotNanInd),'linear','linear' );
-% 
-% U0 = 0*coordinatesFEMQuadtree(:);
-% temp = F_dispu(coordinatesFEMQuadtree(:,1),coordinatesFEMQuadtree(:,2)); U0(1:2:end)=temp(:);
-% temp = F_dispv(coordinatesFEMQuadtree(:,1),coordinatesFEMQuadtree(:,2)); U0(2:2:end)=temp(:);
+if length(U0NotNanInd) >= 3
+    F_dispu = scatteredInterpolant( DICmesh.coordinatesFEM(U0NotNanInd,1), DICmesh.coordinatesFEM(U0NotNanInd,2), ...
+        U0(2*U0NotNanInd-1), 'linear', 'linear' );
+    F_dispv = scatteredInterpolant( DICmesh.coordinatesFEM(U0NotNanInd,1), DICmesh.coordinatesFEM(U0NotNanInd,2), ...
+        U0(2*U0NotNanInd), 'linear', 'linear' );
+
+    U0 = zeros(2*size(coordinatesFEMQuadtree,1), 1);
+    temp = F_dispu(coordinatesFEMQuadtree(:,1), coordinatesFEMQuadtree(:,2)); U0(1:2:end) = temp(:);
+    temp = F_dispv(coordinatesFEMQuadtree(:,1), coordinatesFEMQuadtree(:,2)); U0(2:2:end) = temp(:);
+
+    % U0 interpolation done
+else
+    warning('GenerateQuadtreeMesh: only %d valid source points, U0 set to zero', length(U0NotNanInd));
+    U0 = zeros(2*size(coordinatesFEMQuadtree,1), 1);
+end
 if DICpara.showImgOrNot
 Plotdisp_show( -U0,coordinatesFEMQuadtree,elementsFEMQuadtree(:,1:4),DICpara,'NoEdgeColor');
 end 

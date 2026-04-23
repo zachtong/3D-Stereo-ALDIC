@@ -38,19 +38,36 @@ cameraParamsRight = cameraParameters('K', cameraParams.cameraParamsRight.K, 'Rad
 %     end
 % end
 
-% Pointwise undistorting %考虑改成parfor
-for i = 1:ImgPairsNum 
+% Pointwise undistorting — skip NaN points (from unconverged ICGN subsets)
+for i = 1:ImgPairsNum
     temp_matchedPairs = matchedPairs{i,1};
-    temp_undistortedPoints = zeros(PointsNum,4);
-    tic;
-    parfor j = 1:PointsNum
-        temp_undistortedPoints_L = undistortPoints(temp_matchedPairs(j,1:2),  cameraParamsLeft);
-        temp_undistortedPoints_R = undistortPoints(temp_matchedPairs(j,3:4),  cameraParamsRight);
+    nPts = size(temp_matchedPairs, 1);
+    temp_undistortedPoints = NaN(nPts, 4);
 
-        temp_undistortedPoints(j,:) = [temp_undistortedPoints_L, temp_undistortedPoints_R];
+    % Find finite points (all 4 coords must be finite)
+    finiteIdx = find(all(isfinite(temp_matchedPairs), 2));
+    nFinite = length(finiteIdx);
+
+    if nFinite == 0
+        warning('funUndistortPoints: frame %d has no finite points', i);
+        undistortedPoints{i,1} = temp_undistortedPoints;
+        continue;
+    end
+
+    % Extract only finite points for undistortion
+    finitePairs = temp_matchedPairs(finiteIdx, :);
+    temp_finite_undist = zeros(nFinite, 4);
+    tic;
+    parfor j = 1:nFinite
+        temp_undistortedPoints_L = undistortPoints(finitePairs(j,1:2), cameraParamsLeft);
+        temp_undistortedPoints_R = undistortPoints(finitePairs(j,3:4), cameraParamsRight);
+        temp_finite_undist(j,:) = [temp_undistortedPoints_L, temp_undistortedPoints_R];
     end
     time(i) = toc;
-    %disp(time(i));
+
+    % Put results back, NaN points stay NaN
+    temp_undistortedPoints(finiteIdx, :) = temp_finite_undist;
     undistortedPoints{i,1} = temp_undistortedPoints;
+    % Summary printed by caller if needed
 end
 

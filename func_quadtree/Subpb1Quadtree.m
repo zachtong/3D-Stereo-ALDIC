@@ -70,8 +70,8 @@ winsize_y = DICpara.winsize_List(:,2);
 %% ClusterNo == 0 or 1: Sequential computing
 if (ClusterNo == 0) || (ClusterNo == 1)
     
-    h = waitbar(0,'Please wait for Subproblem 1 IC-GN iterations!'); tic;
-    
+    tic;
+
     for tempj = 1 : size(coordinatesFEM,1)  % tempj is the element index
         x0temp = round(coordinatesFEM(tempj,1)); y0temp = round(coordinatesFEM(tempj,2)); HLocal = zeros(6,6);
         if ALSolveStep > 1
@@ -107,16 +107,13 @@ if (ClusterNo == 0) || (ClusterNo == 1)
         end
         % waitbar(tempj/(size(coordinatesFEM,1)));
     end
-    close(h); ALSub1Time = toc;
-    
+    ALSub1Time = toc;
+
 
 %% ClusterNo > 1: parallel computing
 else
-    
+
     % Start parallel computing
-    % ****** This step needs to be careful: may be out of memory ******
-    % delete(gcp);parpool(ClusterNo); tic;
-    hbar = parfor_progressbar(size(coordinatesFEM,1),'Please wait for Subproblem 1 IC-GN iterations!');
     HPar1 = HPar{1}; HPar2 = HPar{2}; HPar3 = HPar{3}; HPar4 = HPar{4}; HPar5 = HPar{5}; HPar6 = HPar{6}; HPar7 = HPar{7};
     HPar8 = HPar{8}; HPar9 = HPar{9}; HPar10 = HPar{10}; HPar11 = HPar{11}; HPar12 = HPar{12}; HPar13 = HPar{13}; HPar14 = HPar{14};
     HPar15 = HPar{15}; HPar16 = HPar{16}; HPar17 = HPar{17}; HPar18 = HPar{18}; HPar19 = HPar{19}; HPar20 = HPar{20}; HPar21 = HPar{21};
@@ -154,9 +151,8 @@ else
             HPar15(tempj) = Htemp(18); HPar16(tempj) = Htemp(22); HPar17(tempj) = Htemp(23); HPar18(tempj) = Htemp(24);
             HPar19(tempj) = Htemp(29); HPar20(tempj) = Htemp(30); HPar21(tempj) = Htemp(36);
         end
-        hbar.iterate(1);
     end
-    close(hbar); ALSub1Time = toc;
+    ALSub1Time = toc;
     HPar{1} = HPar1; HPar{2} = HPar2; HPar{3} = HPar3; HPar{4} = HPar4; HPar{5} = HPar5; HPar{6} = HPar6; HPar{7} = HPar7;
     HPar{8} = HPar8; HPar{9} = HPar9; HPar{10} = HPar10; HPar{11} = HPar11; HPar{12} = HPar12; HPar{13} = HPar13; HPar{14} = HPar14;
     HPar{15} = HPar15; HPar{16} = HPar16; HPar{17} = HPar17; HPar{18} = HPar18; HPar{19} = HPar19; HPar{20} = HPar20; HPar{21} = HPar21;
@@ -186,46 +182,48 @@ ConvItPerEleStd = std(ConvItPerEle(LocalICGNGoodPt));
 LocalICGNBadPt = unique(union(LocalICGNBadPt,row4));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-disp(['Local ICGN bad subsets %: ', num2str(LocalICGNBadPtNum),'/',num2str(size(coordinatesFEM,1)-length(row3)), ...
-    '=',num2str(100*(LocalICGNBadPtNum)/(size(coordinatesFEM,1)-length(row3))),'%']);
+fprintf('  Subpb1 ICGN: %d/%d bad (%.1f%%), %.1fs\n', LocalICGNBadPtNum, ...
+    size(coordinatesFEM,1)-length(row3), ...
+    100*LocalICGNBadPtNum/(size(coordinatesFEM,1)-length(row3)), ALSub1Time);
 U(2*LocalICGNBadPt-1) = NaN; U(2*LocalICGNBadPt) = NaN;
   
-%%%%%% Fill nans %%%%%%
+%%%%%% Fill nans (per connected region, scatteredInterpolant) %%%%%%
+% Replaced RBF thin plate spline (O(N^3)) with scatteredInterpolant (O(N log N)).
+% Only fills NaN points, preserving good ICGN results.
 nanindex = find(isnan(U(1:2:end))==1); notnanindex = setdiff([1:1:size(coordinatesFEM,1)],nanindex);
- 
-% dilatedI = ( imgaussfilt(double(Df.ImgRefMask),0.5) );
-% dilatedI = logical( dilatedI > 0.01); % figure, imshow(dilatedI)
-dilatedI = logical(DICpara.ImgRefMask);
-cc = bwconncomp(dilatedI,8);
-indPxAll = sub2ind( Df.imgSize, round(coordinatesFEM(:,1)),round(coordinatesFEM(:,2)));
-indPxNotNanAll = sub2ind( Df.imgSize, round(coordinatesFEM(notnanindex,1)), round(coordinatesFEM(notnanindex,2)) );
-stats = regionprops(cc,'Area','PixelList'); 
 
-for tempi = 1:length(stats)
-    
-    try % if stats(tempi).Area > 20
-        
-        %%%%% Find those nodes %%%%%
-        indPxtempi = sub2ind( Df.imgSize, stats(tempi).PixelList(:,2), stats(tempi).PixelList(:,1) );
-        Lia = ismember(indPxAll,indPxtempi); [LiaList,~] = find(Lia==1);
-        Lib = ismember(indPxNotNanAll,indPxtempi); [LibList,~] = find(Lib==1);
+if ~isempty(nanindex)
+    dilatedI = logical(DICpara.ImgRefMask);
+    cc = bwconncomp(dilatedI,8);
+    indPxAll = sub2ind( Df.imgSize, round(coordinatesFEM(:,1)),round(coordinatesFEM(:,2)));
+    indPxNotNanAll = sub2ind( Df.imgSize, round(coordinatesFEM(notnanindex,1)), round(coordinatesFEM(notnanindex,2)) );
+    stats = regionprops(cc,'Area','PixelList');
 
-        %%%%% RBF (Radial basis function) works better than "scatteredInterpolant" %%%%%
-        % ------ Disp u ------
-        op1 = rbfcreate( round([coordinatesFEM(notnanindex(LibList),1:2)]'),[U(2*notnanindex(LibList)-1)]','RBFFunction', 'thinplate'); rbfcheck(op1);
-        fi1 = rbfinterp( [coordinatesFEM(LiaList,1:2)]', op1);
-        U(2*LiaList-1) = fi1(:);
-        % figure, plot3(coordinatesFEM(notnanindex(LibList),1),coordinatesFEM(notnanindex(LibList),2),U(2*notnanindex(LibList)-1),'.')
-        % hold on; plot3(coordinatesFEM(LiaList,1),coordinatesFEM(LiaList,2),fi1,'.')
+    for tempi = 1:length(stats)
+        try
+            indPxtempi = sub2ind( Df.imgSize, stats(tempi).PixelList(:,2), stats(tempi).PixelList(:,1) );
+            Lia = ismember(indPxAll,indPxtempi); LiaList = find(Lia);
+            Lib = ismember(indPxNotNanAll,indPxtempi); LibList = find(Lib);
 
-        % ------ Disp v ------
-        op1 = rbfcreate( round([coordinatesFEM(notnanindex(LibList),1:2)]'),[U(2*notnanindex(LibList) )]','RBFFunction', 'thinplate'); rbfcheck(op1);
-        fi1 = rbfinterp( [coordinatesFEM(LiaList,1:2)]', op1);
-        U(2*LiaList ) = fi1(:);
-    
-    catch
+            if isempty(LibList) || length(LibList) < 3, continue; end
+
+            nanInRegion = LiaList(ismember(LiaList, nanindex));
+            if isempty(nanInRegion), continue; end
+
+            src_coords = coordinatesFEM(notnanindex(LibList), 1:2);
+            query_coords = coordinatesFEM(nanInRegion, 1:2);
+
+            Fi_u = scatteredInterpolant(src_coords(:,1), src_coords(:,2), ...
+                U(2*notnanindex(LibList)-1), 'natural', 'nearest');
+            Fi_v = scatteredInterpolant(src_coords(:,1), src_coords(:,2), ...
+                U(2*notnanindex(LibList)),   'natural', 'nearest');
+
+            U(2*nanInRegion-1) = Fi_u(query_coords(:,1), query_coords(:,2));
+            U(2*nanInRegion)   = Fi_v(query_coords(:,1), query_coords(:,2));
+        catch ME
+            warning('%s: %s', ME.identifier, ME.message);
+        end
     end
-     
 end
 
 %%%%% Remove outliers %%%%%

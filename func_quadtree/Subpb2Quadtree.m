@@ -71,25 +71,9 @@ while ConvergeOrNot < 0.5 && IterStep < 1 % Only do one step; IterStep will add 
     
     IterStep = IterStep+1;
     
-    if waitBarDisplayOrNot == 0
-        if (ClusterNo==0) || (ClusterNo==1)
-            hbar = waitbar(0, ['FE-method to solve Subproblem 2.']);
-        else
-            hbar=parfor_progressbar(size(elementsFEM,1),['FE-method to solve Subproblem 2.']);
-        end
-    end
-    
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % ============= For each element, assemble the stiffness matrix ============
     for eleInd = 1:size(elementsFEM,1) % eleInd is the element index
-         
-        if waitBarDisplayOrNot == 0
-            if ClusterNo== 0 || ClusterNo== 1
-                waitbar(eleInd/size(elementsFEM,1));
-            else
-                hbar.iterate(1);
-            end
-        end
         
         tempA = zeros(DIM*8,DIM*8); tempb = tempA(:,1);
         
@@ -274,10 +258,6 @@ while ConvergeOrNot < 0.5 && IterStep < 1 % Only do one step; IterStep will add 
         INDEXBIpar{eleInd}=tempIndexU(:); INDEXBVALpar{eleInd}=tempb(:);   
         
         
-    end
-    
-    if waitBarDisplayOrNot == 0
-      close(hbar);
     end
     
     % ====== Initialize A matrix and b vector ======

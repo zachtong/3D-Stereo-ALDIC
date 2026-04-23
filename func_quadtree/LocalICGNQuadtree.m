@@ -66,15 +66,15 @@ markCoordHoleStrainOrNot = zeros(size(coordinatesFEM,1),1);
 %% ClusterNo == 0 or 1: Sequential computing
 if (ClusterNo == 0) || (ClusterNo == 1)
 
-    h = waitbar(0,'Please wait for Subproblem 1 IC-GN iterations!'); tic;
+    tic; icgnErrCount = 0;
 
     for tempj = 1 : size(coordinatesFEM,1)  % tempj is the element index
 
         x0temp = round(coordinatesFEM(tempj,1)); y0temp = round(coordinatesFEM(tempj,2));
 
         try
-            x = [x0temp-winsize/2 ; x0temp+winsize/2 ; x0temp+winsize/2 ; x0temp-winsize/2];  % [coordinates(elements(j,:),1)];
-            y = [y0temp-winsize/2 ; y0temp+winsize/2 ; y0temp+winsize/2 ; y0temp-winsize/2];  % [coordinates(elements(j,:),2)];
+            x = [x0temp-winsize/2 ; x0temp+winsize/2 ; x0temp+winsize/2 ; x0temp-winsize/2];
+            y = [y0temp-winsize/2 ; y0temp+winsize/2 ; y0temp+winsize/2 ; y0temp-winsize/2];
             tempfImgMask = Df.ImgRefMask([x(1):1:x(3)],[y(1):1:y(3)]);
             tempf = ImgRef([x(1):1:x(3)],[y(1):1:y(3)]) .* tempfImgMask;
             DfDxImgMaskIndCount = sum(double(1-logical(tempf(:))));
@@ -86,56 +86,44 @@ if (ClusterNo == 0) || (ClusterNo == 1)
         end
 
         try
-            if shapeFunctionOrder == 1 % 1st-order shape function
+            if shapeFunctionOrder == 1
                 [Utemp, Ftemp, ConvItPerEle(tempj), HtempPar(tempj,:)] = funICGNQuadtree(U0(2*tempj-1:2*tempj), ...
                     x0temp,y0temp,Df,ImgRef,ImgDef,winsize,tol,ICGNmethod);
-                % ------ Store solved deformation results ------
                 UtempPar(tempj) = Utemp(1); VtempPar(tempj) = Utemp(2);
                 F11tempPar(tempj) = Ftemp(1); F21tempPar(tempj) = Ftemp(2); F12tempPar(tempj) = Ftemp(3); F22tempPar(tempj) = Ftemp(4);
-                waitbar(tempj/(size(coordinatesFEM,1)));
-
-            elseif shapeFunctionOrder == 2 % 2nd-order shape function
-
+            elseif shapeFunctionOrder == 2
                 [Utemp, Ftemp, ConvItPerEle(tempj), HtempPar(tempj,:)] = funICGNQuadtree2(U0(2*tempj-1:2*tempj), ...
                     x0temp,y0temp,Df,ImgRef,ImgDef,winsize,tol,ICGNmethod);
-                % ------ Store solved deformation results ------
                 UtempPar(tempj) = Utemp(1); VtempPar(tempj) = Utemp(2);
-
             end
-
-
-            % disp(['ele ',num2str(tempj),' converge step is ',num2str(ConvItPerEle(tempj)),' (>0-converged; 0-unconverged)']);
-            % ------ Store solved deformation gradients ------
-
-
         catch
+            icgnErrCount = icgnErrCount + 1;
             ConvItPerEle(tempj) = -1;
             UtempPar(tempj) = nan; VtempPar(tempj) = nan;
             F11tempPar(tempj) = nan; F21tempPar(tempj) = nan; F12tempPar(tempj) = nan; F22tempPar(tempj) = nan;
-            waitbar(tempj/(size(coordinatesFEM,1)));
         end
 
     end
-    close(h);  LocalTime = toc;
+    LocalTime = toc;
+    if icgnErrCount > 0, fprintf('  ICGN seq: %d/%d subsets failed\n', icgnErrCount, size(coordinatesFEM,1)); end
 
     %% ClusterNo > 1: parallel computing
 else
 
-    % Start parallel computing
-    % ****** This step needs to be careful: may be out of memory ******
-    disp('--- Set up Parallel pool ---'); tic;
-    hbar = parfor_progressbar(size(coordinatesFEM,1),'Please wait for Subproblem 1 IC-GN iterations!');
-    parfor tempj = 1:size(coordinatesFEM,1)  % tempj is the element index
+    % Parallel computing
+    tic;
+    icgnErrCount = zeros(size(coordinatesFEM,1), 1);  % parfor-compatible error counter
+    parfor tempj = 1:size(coordinatesFEM,1)
 
         x0temp = round(coordinatesFEM(tempj,1)); y0temp = round(coordinatesFEM(tempj,2));
 
         try
-            x = [x0temp-winsize/2 ; x0temp+winsize/2 ; x0temp+winsize/2 ; x0temp-winsize/2];  % [coordinates(elements(j,:),1)];
-            y = [y0temp-winsize/2 ; y0temp+winsize/2 ; y0temp+winsize/2 ; y0temp-winsize/2];  % [coordinates(elements(j,:),2)];
+            x = [x0temp-winsize/2 ; x0temp+winsize/2 ; x0temp+winsize/2 ; x0temp-winsize/2];
+            y = [y0temp-winsize/2 ; y0temp+winsize/2 ; y0temp+winsize/2 ; y0temp-winsize/2];
             tempfImgMask = Df.ImgRefMask([x(1):1:x(3)],[y(1):1:y(3)]);
             tempf = ImgRef([x(1):1:x(3)],[y(1):1:y(3)]) .* tempfImgMask;
             DfDxImgMaskIndCount = sum(double(1-logical(tempf(:))));
-            if DfDxImgMaskIndCount > 0. *(winsize+1)^2
+            if DfDxImgMaskIndCount > 0.6 *(winsize+1)^2
                 markCoordHoleStrainOrNot(tempj) = 1;
             end
         catch
@@ -143,39 +131,28 @@ else
         end
 
         try
-            if shapeFunctionOrder == 1 % 1st-order shape function
+            if shapeFunctionOrder == 1
                 [Utemp, Ftemp, ConvItPerEle(tempj), HtempPar(tempj,:)] = funICGNQuadtree(U0(2*tempj-1:2*tempj), ...
                     x0temp,y0temp,Df,ImgRef,ImgDef,winsize,tol,ICGNmethod);
-                % ------ Store solved deformation results ------
                 UtempPar(tempj) = Utemp(1); VtempPar(tempj) = Utemp(2);
                 F11tempPar(tempj) = Ftemp(1); F21tempPar(tempj) = Ftemp(2); F12tempPar(tempj) = Ftemp(3); F22tempPar(tempj) = Ftemp(4);
-                hbar.iterate(1);
-
-            elseif shapeFunctionOrder == 2 % 2nd-order shape function
-
+            elseif shapeFunctionOrder == 2
                 [Utemp, Ftemp, ConvItPerEle(tempj), HtempPar(tempj,:)] = funICGNQuadtree2(U0(2*tempj-1:2*tempj), ...
                     x0temp,y0temp,Df,ImgRef,ImgDef,winsize,tol,ICGNmethod);
-                % ------ Store solved deformation results ------
                 UtempPar(tempj) = Utemp(1); VtempPar(tempj) = Utemp(2);
                 F11tempPar(tempj) = Ftemp(1); F21tempPar(tempj) = Ftemp(2); F12tempPar(tempj) = Ftemp(3); F22tempPar(tempj) = Ftemp(4);
-                hbar.iterate(1);
             end
-
-            % disp(['ele ',num2str(tempj),' converge step is ',num2str(ConvItPerEle(tempj)),' (>0-converged; 0-unconverged)']);
-
-
-        catch ME
-            % fprintf('Error ID: %s\n', ME.identifier);
-            % fprintf('Error Message: %s\n', ME.message);
+        catch
+            icgnErrCount(tempj) = 1;
             ConvItPerEle(tempj) = -1;
             UtempPar(tempj) = nan; VtempPar(tempj) = nan;
             F11tempPar(tempj) = nan; F21tempPar(tempj) = nan; F12tempPar(tempj) = nan; F22tempPar(tempj) = nan;
-            hbar.iterate(1);
         end
     end
 
-    close(hbar);
     LocalTime = toc;
+    nErr = sum(icgnErrCount);
+    if nErr > 0, fprintf('  ICGN parfor: %d/%d subsets failed\n', nErr, size(coordinatesFEM,1)); end
 
 end
 
@@ -201,9 +178,16 @@ LocalICGNBadPt = unique(union(row1,row2)); LocalICGNBadPtNum = length(LocalICGNB
 LocalICGNGoodPt = setdiff([1:1:size(coordinatesFEM,1)],LocalICGNBadPt);
 %ConvItPerEleMean = median(ConvItPerEle(LocalICGNGoodPt));
 %ConvItPerEleStd = std(ConvItPerEle(LocalICGNGoodPt));
-pd = fitdist( ConvItPerEle(LocalICGNGoodPt), 'Normal'  );
-ConvItPerEleMean = pd.mu;
-ConvItPerEleStd = pd.sigma;
+if numel(LocalICGNGoodPt) >= 3
+    pd = fitdist( ConvItPerEle(LocalICGNGoodPt), 'Normal'  );
+    ConvItPerEleMean = pd.mu;
+    ConvItPerEleStd = pd.sigma;
+else
+    % Too few good points to fit a distribution — skip statistical filtering
+    ConvItPerEleMean = Inf;
+    ConvItPerEleStd = 0;
+    warning('LocalICGN: only %d good subsets, skipping convergence filtering', numel(LocalICGNGoodPt));
+end
 [row4,~] =  find(ConvItPerEle(:) > max([ConvItPerEleMean+1*ConvItPerEleStd, 6 ])); % Here "0.15" is an empirical value
 LocalICGNBadPt = unique(union(LocalICGNBadPt,row4));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -211,87 +195,54 @@ LocalICGNBadPt = unique(union(LocalICGNBadPt,row4));
 
 
 
-%% Print results info on the MATLAB command window
-disp(['Local ICGN bad subsets %: ', num2str(LocalICGNBadPtNum),'/',num2str(size(coordinatesFEM,1)-length(row3)), ...
-    '=',num2str(100*(LocalICGNBadPtNum)/(size(coordinatesFEM,1)-length(row3))),'%']);
+%% Print compact summary
+fprintf('  ICGN: %d/%d bad (%.1f%%), %.1fs\n', LocalICGNBadPtNum, ...
+    size(coordinatesFEM,1)-length(row3), ...
+    100*LocalICGNBadPtNum/(size(coordinatesFEM,1)-length(row3)), LocalTime);
 U(2*LocalICGNBadPt-1) = NaN; U(2*LocalICGNBadPt) = NaN;
 % F(4*LocalICGNBadPt-3) = NaN; F(4*LocalICGNBadPt-2) = NaN; F(4*LocalICGNBadPt-1) = NaN; F(4*LocalICGNBadPt) = NaN;
 
 % figure,plot3(coordinatesFEM(:,1),coordinatesFEM(:,2),F(1:4:end),'.')
 
 
-%%%%%% Fill nans %%%%%%
+%%%%%% Fill nans (per connected region, scatteredInterpolant) %%%%%%
+% Replaced RBF thin plate spline (O(N^3), ~228s for 30k pts) with
+% scatteredInterpolant (O(N log N), ~0.5s). Only fills NaN points,
+% preserving good ICGN results. Original RBF overwrote ALL points.
 nanindex = find(isnan(U(1:2:end))==1); notnanindex = setdiff([1:1:size(coordinatesFEM,1)],nanindex);
-% nanindexF = find(isnan(F(1:4:end))==1); notnanindexF = setdiff([1:1:size(coordinatesFEM,1)],nanindexF);
 
+if ~isempty(nanindex)
+    dilatedI = Df.ImgRefMask;
+    cc = bwconncomp(dilatedI,8);
+    indPxAll = sub2ind( Df.imgSize, round(coordinatesFEM(:,1)), round(coordinatesFEM(:,2)) );
+    indPxNotNanAll = sub2ind( Df.imgSize, round(coordinatesFEM(notnanindex,1)), round(coordinatesFEM(notnanindex,2)) );
+    stats = regionprops(cc,'Area','PixelList');
+    for tempi = 1:length(stats)
+        try
+            indPxtempi = sub2ind( Df.imgSize, stats(tempi).PixelList(:,2), stats(tempi).PixelList(:,1) );
+            Lia = ismember(indPxAll,indPxtempi); LiaList = find(Lia);
+            Lib = ismember(indPxNotNanAll,indPxtempi); LibList = find(Lib);
 
-% dilatedI = ( imgaussfilt(double(Df.ImgRefMask),0.5) );
-% dilatedI = logical( dilatedI > 0.5); % figure, imshow(dilatedI)
-dilatedI = Df.ImgRefMask;
-cc = bwconncomp(dilatedI,8);
-indPxAll = sub2ind( Df.imgSize, round(coordinatesFEM(:,1)), round(coordinatesFEM(:,2)) );
-indPxNotNanAll = sub2ind( Df.imgSize, round(coordinatesFEM(notnanindex,1)), round(coordinatesFEM(notnanindex,2)) );
-stats = regionprops(cc,'Area','PixelList');
-for tempi = 1:length(stats)
+            if isempty(LibList) || length(LibList) < 3, continue; end
 
-    try %if stats(tempi).Area > 20
+            % Find NaN nodes within this connected region
+            nanInRegion = LiaList(ismember(LiaList, nanindex));
+            if isempty(nanInRegion), continue; end
 
-        %%%%% Find those nodes %%%%%
-        indPxtempi = sub2ind( Df.imgSize, stats(tempi).PixelList(:,2), stats(tempi).PixelList(:,1) );
-        Lia = ismember(indPxAll,indPxtempi); [LiaList,~] = find(Lia==1);
-        Lib = ismember(indPxNotNanAll,indPxtempi); [LibList,~] = find(Lib==1);
+            % Interpolate only NaN points from good points in the same region
+            src_coords = coordinatesFEM(notnanindex(LibList), 1:2);
+            query_coords = coordinatesFEM(nanInRegion, 1:2);
 
-        %     %%%%% Plane fitting %%%%%
-        %     uv = [U(2*notnanindex(LibList)-1), U(2*notnanindex(LibList))];
-        %     Rad = 1+2*winstepsize;
-        %     [~,UPlaneFittemp,FPlaneFittemp] = funCompDefGrad2(uv, coordinatesFEM(notnanindex(LibList),1:2), Rad, 1e6, dilatedI );
-        %
-        %     % figure, plot3(coordinatesFEM(notnanindex(LibList),1), coordinatesFEM(notnanindex(LibList),2), uv(:,1), '.' );
-        %     % figure; plot3(coordinatesFEM(notnanindex(LibList),1), coordinatesFEM(notnanindex(LibList),2), uv(:,2), 'r.' );
-        %     % U(2*notnanindex(LibList)-1) = UPlaneFittemp(1:2:end);
-        %     % U(2*notnanindex(LibList)) = UPlaneFittemp(2:2:end);
-        %
-        %     F(4*notnanindex(LibList)-3) = FPlaneFittemp(1:4:end);
-        %     F(4*notnanindex(LibList)-2) = FPlaneFittemp(2:4:end);
-        %     F(4*notnanindex(LibList)-1) = FPlaneFittemp(3:4:end);
-        %     F(4*notnanindex(LibList)-0) = FPlaneFittemp(4:4:end);
+            Fi_u = scatteredInterpolant(src_coords(:,1), src_coords(:,2), ...
+                U(2*notnanindex(LibList)-1), 'natural', 'nearest');
+            Fi_v = scatteredInterpolant(src_coords(:,1), src_coords(:,2), ...
+                U(2*notnanindex(LibList)),   'natural', 'nearest');
 
-        % %%%%% RBF (Radial basis function) works better than "scatteredInterpolant" %%%%%
-        % ------ Disp u ------
-        op1 = rbfcreate( round([coordinatesFEM(notnanindex(LibList),1:2)]'),[U(2*notnanindex(LibList)-1)]','RBFFunction', 'thinplate' ); %rbfcheck(op1);
-        fi1 = rbfinterp( [coordinatesFEM(LiaList,1:2)]', op1);
-        U(2*LiaList-1) = fi1(:);
-        % figure, plot3(coordinatesFEM(notnanindex(LibList),1),coordinatesFEM(notnanindex(LibList),2),U(2*notnanindex(LibList)-1),'.')
-        % hold on; plot3(coordinatesFEM(LiaList,1),coordinatesFEM(LiaList,2),fi1,'.')
-
-        % ------ Disp v ------
-        op1 = rbfcreate( round([coordinatesFEM(notnanindex(LibList),1:2)]'),[U(2*notnanindex(LibList) )]','RBFFunction', 'thinplate' ); %rbfcheck(op1);
-        fi1 = rbfinterp( [coordinatesFEM(LiaList,1:2)]', op1);
-        U(2*LiaList ) = fi1(:);
-
-
-        % % if  (LocalICGNBadPtNum)/(size(coordinatesFEM,1)-length(row3)) < 0.4
-        %
-        %     % ------ F11 ------
-        %     op1 = rbfcreate( round([coordinatesFEM(notnanindex(LibList),1:2)]'),[F(4*notnanindex(LibList)-3)]','RBFFunction', 'thinplate'); %rbfcheck(op1);
-        %     fi1 = rbfinterp( [coordinatesFEM(LiaList,1:2)]', op1);
-        %     F(4*LiaList-3) = fi1(:);
-        %     % ------ F21 ------
-        %     op1 = rbfcreate( round([coordinatesFEM(notnanindex(LibList),1:2)]'),[F(4*notnanindex(LibList)-2)]','RBFFunction', 'thinplate');% rbfcheck(op1);
-        %     fi1 = rbfinterp( [coordinatesFEM(LiaList,1:2)]', op1);
-        %     F(4*LiaList-2) = fi1(:);
-        %     % ------ F12 ------
-        %     op1 = rbfcreate( round([coordinatesFEM(notnanindex(LibList),1:2)]'),[F(4*notnanindex(LibList)-1)]','RBFFunction', 'thinplate'); %rbfcheck(op1);
-        %     fi1 = rbfinterp( [coordinatesFEM(LiaList,1:2)]', op1);
-        %     F(4*LiaList-1) = fi1(:);
-        %     % ------ F22 ------
-        %     op1 = rbfcreate( round([coordinatesFEM(notnanindex(LibList),1:2)]'),[F(4*notnanindex(LibList)-0)]','RBFFunction', 'thinplate'); %rbfcheck(op1);
-        %     fi1 = rbfinterp( [coordinatesFEM(LiaList,1:2)]', op1);
-        %     F(4*LiaList) = fi1(:);
-        %
-        % % end
-
-    catch
+            U(2*nanInRegion-1) = Fi_u(query_coords(:,1), query_coords(:,2));
+            U(2*nanInRegion)   = Fi_v(query_coords(:,1), query_coords(:,2));
+        catch ME
+            warning('%s: %s', ME.identifier, ME.message);
+        end
     end
 end
 
