@@ -251,62 +251,100 @@ hViz.exportBtn.ButtonPushedFcn   = @(~,~) onExportCSV();
 
         hViz.frameLabel.Text = sprintf('Frame: %d / %d', frameIdx, size(r.FinalResult.Coordinates, 1));
 
-        % Pick data vector per variable
+        % Per-node data
         [vals, displayName] = getVariableValues(r, frameIdx, varName);
         if isempty(vals)
             cla(hViz.ax); title(hViz.ax, 'No data'); return;
         end
 
-        coords = r.RD_L.ResultFEMeshEachFrame{1,1}.coordinatesFEM;
-        if size(coords, 1) ~= length(vals)
-            % Incremental mode: strain is on FirstFEM, but coords in the
-            % FirstFEM ~ always aligned. Still fall back to vals size.
+        % Pick mesh + coordinates matching the legacy plot_displacement_component logic.
+        % For both acc and inc modes we render on FirstFEM (the reference mesh) —
+        % that's where computeStrain3D produced the values. If user wants
+        % 'current frame' overlay, offset coordinates by the cumulative left
+        % displacement (U_2D_L = RD_L.ResultDisp{frame-1,1}.U as an Nx2 matrix).
+        FirstFEM = r.RD_L.ResultFEMeshEachFrame{1,1};
+        coords = FirstFEM.coordinatesFEM;
+        elements = FirstFEM.elementsFEM(:,1:4);
+
+        try
+            U_2D_L = r.RD_L.ResultDisp{frameIdx-1, 1}.U;  % Nx2
+        catch
+            U_2D_L = zeros(size(coords));
         end
 
-        % Background image
-        bgImg = [];
+        if bgChoice == 1  % Current frame overlay -> deformed coords
+            coordsPlot = coords + U_2D_L;
+            bgIdx = frameIdx;
+        else              % First frame overlay -> reference coords
+            coordsPlot = coords;
+            bgIdx = 1;
+        end
+
+        % Background image (load as truecolor so colormap applies only to the patch)
+        bgRGB = [];
         try
-            if bgChoice == 1  % current frame
-                fname = fullfile(r.fileNameLeft{2,frameIdx}, r.fileNameLeft{1,frameIdx});
-            else
-                fname = fullfile(r.fileNameLeft{2,1}, r.fileNameLeft{1,1});
-            end
+            fname = fullfile(r.fileNameLeft{2, bgIdx}, r.fileNameLeft{1, bgIdx});
             raw = imread(fname);
             if size(raw,3) >= 3, raw = rgb2gray(raw(:,:,1:3)); end
-            bgImg = raw;
+            raw_gs = mat2gray(double(raw));       % -> [0,1]
+            bgRGB = repmat(raw_gs, [1 1 3]);      % HxWx3 RGB
         catch
-            bgImg = [];
+            bgRGB = [];
         end
 
-        % Color scale
+        % Color scale: 1-99 percentile of finite values = nominal range,
+        % sliders 0..1 remap the range.
         finite = vals(isfinite(vals));
         if isempty(finite)
             vmin = 0; vmax = 1;
         else
-            [vmin, vmax] = deal(min(finite), max(finite));
+            vmin = prctile(finite, 1);
+            vmax = prctile(finite, 99);
+            if vmin == vmax, vmin = min(finite); vmax = max(finite); end
+            if vmin == vmax, vmax = vmin + eps(max(abs(vmin), 1)); end
         end
-        % Apply user slider positions (0..1 of vmin..vmax range)
         range = vmax - vmin;
         cmin = vmin + hViz.cminSlider.Value * range;
         cmax = vmin + hViz.cmaxSlider.Value * range;
         if cmax <= cmin, cmax = cmin + eps(max(abs(cmin), 1)); end
 
-        cla(hViz.ax);
-        if ~isempty(bgImg)
-            imshow(bgImg, 'Parent', hViz.ax);
+        % --- Render: truecolor background image + FEM patch overlay ---
+        cla(hViz.ax, 'reset');
+        if ~isempty(bgRGB)
+            image(hViz.ax, bgRGB);
             hold(hViz.ax, 'on');
         end
-        scatter(hViz.ax, coords(:,1), coords(:,2), 6, vals, 'filled', ...
-                'MarkerEdgeColor', 'none', 'MarkerFaceAlpha', 0.85);
+
+        % FEM mesh patch (interpolated colors per quad element)
+        if size(elements, 2) == 4 && size(coordsPlot, 1) >= max(elements(:))
+            nNodes = size(coordsPlot, 1);
+            nVals  = length(vals);
+            if nVals < nNodes
+                vals(end+1:nNodes) = NaN;
+            elseif nVals > nNodes
+                vals = vals(1:nNodes);
+            end
+            patch(hViz.ax, 'Faces', elements, ...
+                           'Vertices', coordsPlot, ...
+                           'FaceVertexCData', vals, ...
+                           'FaceColor', 'interp', ...
+                           'EdgeColor', 'none', ...
+                           'FaceAlpha', 0.8);
+        else
+            % Fallback: scatter if mesh doesn't look right
+            scatter(hViz.ax, coordsPlot(:,1), coordsPlot(:,2), 8, vals, 'filled', ...
+                    'MarkerFaceAlpha', 0.8);
+        end
+
         hold(hViz.ax, 'off');
         colormap(hViz.ax, 'turbo');
         cb = colorbar(hViz.ax);
         cb.Label.String = displayName;
         clim(hViz.ax, [cmin cmax]);
         axis(hViz.ax, 'image');
-        set(hViz.ax, 'YDir', 'reverse');
-        title(hViz.ax, sprintf('%s — frame %d', displayName, frameIdx), ...
-              'Interpreter', 'none');
+        set(hViz.ax, 'YDir', 'reverse', 'XTick', [], 'YTick', []);
+        title(hViz.ax, sprintf('%s  —  frame %d  (range: %.3g..%.3g)', ...
+              displayName, frameIdx, cmin, cmax), 'Interpreter', 'none');
     end
 
     function onFrameSlider()
@@ -357,8 +395,9 @@ end  % main function
 % ============================================================
 function h = buildConfigTab(parent, p)
 mainGrid = uigridlayout(parent, [6 1]);
-mainGrid.RowHeight = {180, 160, 120, 130, 'fit', 40};
+mainGrid.RowHeight = {245, 175, 105, 140, 'fit', 40};
 mainGrid.RowSpacing = 8; mainGrid.Padding = [14 14 14 14];
+mainGrid.Scrollable = 'on';
 
 % --- Data ---
 panel1 = uipanel(mainGrid, 'Title', '1. Data', 'FontWeight', 'bold');
