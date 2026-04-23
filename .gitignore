@@ -1,0 +1,36 @@
+# MATLAB build artifacts
+*.asv
+*.slxc
+slprj/
+
+# Private research and personal work
+research/
+CLAUDE.md
+
+# Large data (>1 GB, kept on disk but not in git)
+Stereo_DIC_Challenge_*/
+results/
+
+# Test baseline (user-captured, machine-specific)
+tests/baseline/
+
+# Editor / IDE
+.claude/
+.vscode/
+.idea/
+*.swp
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.bak
+*~
