@@ -19,7 +19,6 @@ function [Df] = funImgGradientMasks(ImgRef,ImgDef,varargin)
 % ==============================================
 
 
-fprintf('\n'); disp('--- Start to compute image gradients ---');
 imgSize = size(ImgRef);
 
 
@@ -81,7 +80,6 @@ else
     
 end
 
-disp('--- Computing image gradients done ---');
 
 
 end

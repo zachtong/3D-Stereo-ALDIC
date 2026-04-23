@@ -174,8 +174,6 @@ for i = 1:(size(x,1)*size(y,2))
     U000(2*i)   = vInit(i); % 0; %v(i);
     try Phi0(i)   = PhiInit(i); catch Phi0(i)=0; end
 end
-disp('Finish setting up mesh and assigning initial value!')
- 
 U0 = U000;
 
 

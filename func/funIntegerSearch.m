@@ -99,20 +99,12 @@ end
 
 function [x,y,u,v,cc] = funIntegerSearchWholeField(f,g,tempSizeOfSearchRegion,gridx,gridy,winsize,winstepsize)
 
-%cj1 = 1; ci1 = 1; % index to count main loop
-
 if length(winstepsize)==1, winstepsize = repmat(winstepsize,1,2); end
 if length(winsize)==1, winsize = repmat(winsize,1,2); end
 
-% disp('Assemble point position sequence.');
 % Zach revised 20240925
 XList = [gridx(1) : winstepsize(1) : gridx(2)-winsize(1)-winstepsize(1)];
 YList = [gridy(1) : winstepsize(2) : gridy(2)-winsize(2)-winstepsize(2)];
-
-%---------------Original ----------------------
-% XList = [gridx(1) : winstepsize(1) : gridx(2)-winsize(1)-winstepsize(1)];
-% YList = [gridy(1) : winstepsize(2) : gridy(2)-winsize(1)-winstepsize(2)];
-%-------------------------------------------------------
 
 [XX,YY] = ndgrid(XList,YList);
 temparrayLength = length(XList)*length(YList);
@@ -122,126 +114,86 @@ PtPosSeq(:,1) = XX(:); PtPosSeq(:,2) = YY(:);
 cj1temp = zeros(temparrayLength,1); ci1temp = cj1temp;
 utemp = cj1temp; vtemp = cj1temp;
 xtemp = cj1temp; ytemp = cj1temp; Phitemp = cj1temp;
+qfactors = zeros(temparrayLength, 2);  % Pre-allocate for parfor
 
-%% ========== Start initial integer search ==========
-hbar = waitbar(0,'FFT initial guess: it is fast and please wait.');
-% hbar = parfor_progressbar(temparrayLength,'Please wait for integer search!');
-
-% sizeOfx1 = floor((gridx(2)-gridx(1)-winsize)/winstepsize)+1;
-% sizeOfx2 = floor((gridy(2)-gridy(1)-winsize)/winstepsize)+1;
-% disp(['Init search using FFT cross correlation on grid: ',num2str(sizeOfx1),'x',num2str(sizeOfx2)]);
 x = zeros(length(YList),length(XList)); y = x; u = x; v = x; Phi = x;
-    
+
 tempSizeOfSearchRegion_original = tempSizeOfSearchRegion;
+numXList = length(XList);
+fSize1 = size(f,1); fSize2 = size(f,2);
+gridxEnd = gridx(end); gridyEnd = gridy(end);
 
-for tempi = 1:temparrayLength
+%% ========== Start initial integer search (parfor-enabled) ==========
+fprintf('FFT initial guess: %d subsets, search=[%d %d], grid=%dx%d\n', ...
+    temparrayLength, tempSizeOfSearchRegion(1), tempSizeOfSearchRegion(3), ...
+    length(XList), length(YList));
+tic;
 
-    waitbar(tempi/temparrayLength);
+parfor tempi = 1:temparrayLength
 
-    jj = PtPosSeq(tempi,2); % for jj = gridy(1) : winstepsize : gridy(end)-winsize
-    % jj is for y -or- vertical direction of images
+    jj = PtPosSeq(tempi,2);
+    ii = PtPosSeq(tempi,1);
 
-    ii = PtPosSeq(tempi,1);%for ii = gridx(1) : winstepsize : gridx(end)-winsize
-    % ii is for x -or- horizontal direction of images
-
-
-    % -------------Modify the search region independently for each point ------------------
-    % tempSizeOfSearchRegion: [left right up down]
-        tempSizeOfSearchRegion = tempSizeOfSearchRegion_original;
-    if ii-tempSizeOfSearchRegion(1) < 1
-        tempSizeOfSearchRegion(1) = ii - 1;
+    % Modify search region independently for each boundary point
+    % localSearchRegion: [left right up down]
+    localSearchRegion = tempSizeOfSearchRegion_original;
+    if ii-localSearchRegion(1) < 1
+        localSearchRegion(1) = ii - 1;
     end
-    if jj-tempSizeOfSearchRegion(3) < 1
-        tempSizeOfSearchRegion(3) = jj - 1;
+    if jj-localSearchRegion(3) < 1
+        localSearchRegion(3) = jj - 1;
     end
-    if ii+winsize(1)+tempSizeOfSearchRegion(2) > size(f,1)
-        tempSizeOfSearchRegion(2) = gridx(end) - ii - winsize(1) - 1;
+    if ii+winsize(1)+localSearchRegion(2) > fSize1
+        localSearchRegion(2) = gridxEnd - ii - winsize(1) - 1;
     end
-    if jj+winsize(2)+tempSizeOfSearchRegion(4) > size(f,2)
-        tempSizeOfSearchRegion(4) = gridy(end) - jj - winsize(2) - 1;
+    if jj+winsize(2)+localSearchRegion(4) > fSize2
+        localSearchRegion(4) = gridyEnd - jj - winsize(2) - 1;
     end
-
-    tempSizeOfSearchRegion(tempSizeOfSearchRegion<0) = 0; 
-    %------------------------------------------------------------------------
-
+    localSearchRegion(localSearchRegion<0) = 0;
 
     C = f(ii:ii+winsize(1), jj:jj+winsize(2));
-
-    D = g(ii-tempSizeOfSearchRegion(1):ii+winsize(1)+tempSizeOfSearchRegion(2), ...
-        jj-tempSizeOfSearchRegion(3):jj+winsize(2)+tempSizeOfSearchRegion(4) );
+    D = g(ii-localSearchRegion(1):ii+winsize(1)+localSearchRegion(2), ...
+          jj-localSearchRegion(3):jj+winsize(2)+localSearchRegion(4));
 
     try
         XCORRF2OfCD0 = normxcorr2(C,D);
 
-        %find qfactors
-        cc.A{1} = real(XCORRF2OfCD0);
-        qfactors(tempi,:) = compute_qFactor(cc,tempi);
+        % Compute qfactors with local struct (parfor-safe)
+        localcc = struct('A', {{real(XCORRF2OfCD0)}});
+        qfactors(tempi,:) = compute_qFactor(localcc, tempi);
 
-        % find maximum index of the cross-correlaiton
+        % Find maximum index of the cross-correlation
         [v1temp, u1temp, max_f] = findpeak(XCORRF2OfCD0(winsize(1):end-winsize(1)+1,winsize(2):end-winsize(2)+1),1);
 
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % I tried following code, unfortunately it doesn't work very well
-        % [v1temp1, u1temp1, max_f1] = findpeak(XCORRF2OfCD0(winsize:end-winsize+1,winsize:end-winsize+1),1);
-        % [v1temp2, u1temp2, max_f2] = findpeak(XCORRF2OfCD0(winsize:end-winsize+1,winsize:end-winsize+1),0);
-        %
-        % if max_f2 > 0.999
-        %    v1temp = v1temp2; u1temp = u1temp2; max_f = max_f2;
-        % else
-        %    v1temp = v1temp1; u1temp = u1temp1; max_f = max_f1;
-        % end
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-        % Find the centriod
-        % zero_disp = ceil(size(XCORRF2OfCD0(winsize(1):end-winsize(1)+1,winsize(2):end-winsize(2)+1))/2);
-
-        utemp(tempi) = u1temp -2 - tempSizeOfSearchRegion(1); % u(cj1,ci1)   = u1temp-zero_disp(1);
-        vtemp(tempi) = v1temp -2 - tempSizeOfSearchRegion(3); % v(cj1,ci1)   = v1temp-zero_disp(2);
-        Phitemp(tempi) = max_f; % Phi(cj1,ci1) = max_f;
+        utemp(tempi) = u1temp -2 - localSearchRegion(1);
+        vtemp(tempi) = v1temp -2 - localSearchRegion(3);
+        Phitemp(tempi) = max_f;
     catch
         utemp(tempi)=nan; vtemp(tempi)=nan; Phitemp(tempi)=nan;
-        %cc.A{1} = [0];
         qfactors(tempi,:) = [Inf,Inf];
     end
-    ytemp(tempi) = (jj+jj+winsize(2))/2; % y(cj1,ci1)=(jj+jj+winsize)/2;   % vertical position in image
-    xtemp(tempi) = (ii+ii+winsize(1))/2; % x(cj1,ci1)=(ii+ii+winsize)/2;   % horizontal position in image
-
-    % Update counters
-    %ci1 = ci1 + 1;  % ci1 is moving horizontally for subsets
-
-    %end
-
-    %ci1=1; cj1=cj1+1;  % cj1 is moving vertically for subsets
-    cj1temp(tempi) = ceil(tempi/length(XList));
-    ci1temp(tempi) = tempi - (cj1temp(tempi)-1) * length(XList)  ;
+    ytemp(tempi) = (jj+jj+winsize(2))/2;
+    xtemp(tempi) = (ii+ii+winsize(1))/2;
+    cj1temp(tempi) = ceil(tempi/numXList);
+    ci1temp(tempi) = tempi - (cj1temp(tempi)-1) * numXList;
 
 end
 
-close(hbar);
+fprintf('FFT search done: %d subsets in %.1f seconds\n', temparrayLength, toc);
 
 for k = 1:2
     qf_ = (qfactors(:,k)-min(qfactors(:,k)));
     cc.qfactors(:,k) = qf_/max(qf_);
 end
 
-% hbar = parfor_progressbar(temparrayLegTotal,'Assign results to variables.');
-hbar = waitbar(0,'Assign results to variables.');
 for tempi = 1:temparrayLength
-
     ci1 = ci1temp(tempi); cj1 = cj1temp(tempi);
-
     u(cj1,ci1) = utemp(tempi);
     v(cj1,ci1) = vtemp(tempi);
-
     Phi(cj1,ci1) = Phitemp(tempi);
-
     x(cj1,ci1) = xtemp(tempi);
     y(cj1,ci1) = ytemp(tempi);
-
-    waitbar(tempi/temparrayLength);
-    % hbar.iterate(1);
 end
-close(hbar); disp('Finish initial guess search!');
 % -------- End of Local integer search --------
 
 

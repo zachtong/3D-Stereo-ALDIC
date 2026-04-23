@@ -49,26 +49,34 @@ if (InitFFTSearchMethod == 1) || (InitFFTSearchMethod == 2)
     InitialGuessSatisfied = 1;
     while InitialGuessSatisfied == 1
 
-        fprintf('--- The size of initial guess search zone (pixels)? ---  \n')
-        fprintf('User should start to try a small integer value, and gradually increase the value of \n');
-        fprintf('the search zone size until it is larger than the magnitudes of |disp u| and |disp v|. \n');
-        fprintf('User could also input [size_x, size_y] to search in a rectangular zone. \n');
-        prompt = 'Input here: ';
-
-        if ImgSeqNum == 2
-            tempSizeOfSearchRegion = input(prompt);
-            fprintf('Do you want to use fixed search distance? 0-yes 1-no \n');
-            DICpara.fixSearchDistanceOrNot = input(prompt);
-            %DICpara.fixSearchDistanceOrNot = 0;
-            DICpara.NewFFTSearchDistance = tempSizeOfSearchRegion;
-
-        elseif ImgSeqNum > 2 && DICpara.fixSearchDistanceOrNot == 1
-            fprintf('Search distance in a rectangular zone. \n');
-            tempSizeOfSearchRegion = input(prompt);
-        elseif  ImgSeqNum > 2 && DICpara.fixSearchDistanceOrNot == 0
+        % Decide tempSizeOfSearchRegion: preset -> silent, else prompt.
+        tempSizeOfSearchRegion = [];  % sentinel
+        if ImgSeqNum == 2 && isfield(DICpara,'NewFFTSearchDistance') && ...
+                ~isempty(DICpara.NewFFTSearchDistance)
             tempSizeOfSearchRegion = DICpara.NewFFTSearchDistance;
-        elseif ImgSeqNum == -1 % Stereomatching integer search
+            if ~isfield(DICpara,'fixSearchDistanceOrNot'), DICpara.fixSearchDistanceOrNot = 0; end
+        elseif ImgSeqNum > 2 && DICpara.fixSearchDistanceOrNot == 0
+            tempSizeOfSearchRegion = DICpara.NewFFTSearchDistance;
+        elseif ImgSeqNum == -1 && isfield(DICpara,'NewFFTSearchDistance') && ...
+                ~isempty(DICpara.NewFFTSearchDistance)
+            tempSizeOfSearchRegion = DICpara.NewFFTSearchDistance;
+        end
+
+        if isempty(tempSizeOfSearchRegion)
+            % Interactive: show header + prompt
+            fprintf('--- The size of initial guess search zone (pixels)? ---\n');
+            fprintf('Start with a small integer and grow until larger than |disp u| and |disp v|.\n');
+            fprintf('You may also enter [size_x, size_y] for a rectangular zone.\n');
+            prompt = 'Input here: ';
+            if ImgSeqNum > 2 && DICpara.fixSearchDistanceOrNot == 1
+                fprintf('(Search distance, re-prompted each frame per fixSearchDistanceOrNot=1.)\n');
+            end
             tempSizeOfSearchRegion = input(prompt);
+            if ImgSeqNum == 2
+                fprintf('Do you want to use fixed search distance? 0-yes 1-no\n');
+                DICpara.fixSearchDistanceOrNot = input('Input here: ');
+                DICpara.NewFFTSearchDistance = tempSizeOfSearchRegion;
+            end
         end
 
         if length(tempSizeOfSearchRegion) == 1, tempSizeOfSearchRegion = tempSizeOfSearchRegion*[1,1]; end
@@ -88,13 +96,14 @@ if (InitFFTSearchMethod == 1) || (InitFFTSearchMethod == 2)
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Apply ImgRefMask to make u,v nans if there is a hole
         try
-            x0y0Ind = sub2ind(DICpara.ImgSize, x0(:), y0(:));
+            x0y0Ind = sub2ind(DICpara.ImgSize, round(x0(:)), round(y0(:)));
             temp1 = double(DICpara.ImgRefMask(x0y0Ind));
             temp1(~logical(temp1))=nan;
             HolePtIndMat=reshape(temp1,size(x0));
             u = u.*HolePtIndMat; v = v.*HolePtIndMat;
-        catch
-
+            fprintf('Mask applied to FFT results: %d/%d subsets kept\n', nnz(~isnan(u)), numel(u));
+        catch ME
+            fprintf('Warning: mask application failed: %s\n', ME.message);
         end
         % --------------------------------------
         if showImgOrNot == 1
@@ -152,12 +161,13 @@ elseif InitFFTSearchMethod == 0 % Multigrid search
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Apply ImgRefMask to make u,v nans if there is a hole
     try
-        x0y0Ind = sub2ind(DICpara.ImgSize, x0(:), y0(:));
+        x0y0Ind = sub2ind(DICpara.ImgSize, round(x0(:)), round(y0(:)));
         temp1 = double(DICpara.ImgRefMask(x0y0Ind));
         temp1(~logical(temp1))=nan;
         HolePtIndMat=reshape(temp1,size(x0));
         u = u.*HolePtIndMat; v = v.*HolePtIndMat;
-    catch
+    catch ME
+        warning('%s: %s', ME.identifier, ME.message);
     end
     % --------------------------------------
     if showImgOrNot == 1
