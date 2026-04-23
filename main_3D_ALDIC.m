@@ -111,27 +111,9 @@ end
 [imgNormalized_R,DICpara.gridxyROIRange] = funNormalizeImg(imageRight,DICpara.gridxyROIRange);
 
 % ====== Initialize variable storage ======
-RD_L.ResultDisp = cell(length(imgNormalized_L)-1,1);    RD_L.ResultDefGrad = cell(length(imgNormalized_L)-1,1);
-% RD_L.ResultStrainWorld = cell(length(imgNormalized_L)-1,1);  RD_L.ResultStressWorld = cell(length(imgNormalized_L)-1,1);
-if DICpara.DICIncOrNot == 0
-    RD_L.ResultFEMeshEachFrame = cell(1,1); % Quadtree mesh
-    RD_L.ResultFEMesh = cell(1,1); % Non-Quadtree mesh.
-else
-    RD_L.ResultFEMeshEachFrame = cell(length(imgNormalized_L)-1,1); % Quadtree mesh
-    RD_L.ResultFEMesh = cell(length(imgNormalized_L)-1,1); % Non-Quadtree mesh.
-    RD_L.ResultDisp_inc = cell(length(imgNormalized_L)-1,1);
-end
-
-RD_R.ResultDisp = cell(length(imgNormalized_R)-1,1);    RD_R.ResultDefGrad = cell(length(imgNormalized_R)-1,1);
-%RD_R.ResultStrainWorld = cell(length(imgNormalized_R)-1,1);  RD_R.ResultStressWorld = cell(length(imgNormalized_R)-1,1);
-if DICpara.DICIncOrNot == 0
-    RD_R.ResultFEMeshEachFrame = cell(1,1); % Quadtree mesh
-    RD_R.ResultFEMesh = cell(1,1); % Non-Quadtree mesh.
-else
-    RD_R.ResultFEMeshEachFrame = cell(length(imgNormalized_R)-1,1);
-    RD_R.ResultFEMesh = cell(length(imgNormalized_L)-1,1);
-    RD_R.ResultDisp_inc = cell(length(imgNormalized_L)-1,1);
-end
+isIncremental = (DICpara.DICIncOrNot == 1);
+RD_L = initResultStorage(length(imgNormalized_L), isIncremental);
+RD_R = initResultStorage(length(imgNormalized_R), isIncremental);
 
 DICpara.ImgRefMask = double(maskLeft{1});
 
