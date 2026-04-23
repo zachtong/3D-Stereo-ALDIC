@@ -33,7 +33,7 @@ end
 
 addpath('./examples', './func', './func_quadtree/rbfinterp/', ...
         './plotFiles/', './func_quadtree', './func_quadtree/refinement', ...
-        './plotFiles/export_fig-d966721/', './gui', './gui/gui_helpers');
+        './plotFiles/export_fig-d966721/', './gui');
 
 %% ============ State container ============
 state.DICpara    = setDICparaDefaults();
