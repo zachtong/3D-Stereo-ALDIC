@@ -434,11 +434,20 @@ h.winsize = uispinner(g2, 'Value', valOr(p,'winsize',32), 'Limits', [4 512], 'St
 h.winsize.Tooltip = 'Even integer. Physical subset = (winsize+1) px.';
 
 uilabel(g2, 'Text', 'Step size (winstepsize, px):');
-h.winstepsize = uispinner(g2, 'Value', valOr(p,'winstepsize',16), 'Limits', [1 256], 'Step', 1);
-h.winstepsize.Tooltip = 'Power of 2. Spacing between subsets.';
+pow2_step = [2 4 8 16 32 64 128];
+h.winstepsize = uidropdown(g2, ...
+    'Items', arrayfun(@(v) sprintf('%d', v), pow2_step, 'UniformOutput', false), ...
+    'ItemsData', pow2_step, ...
+    'Value', nearestPow2(valOr(p,'winstepsize',16), pow2_step));
+h.winstepsize.Tooltip = 'Spacing between subset centers. Must be a power of 2.';
 
 uilabel(g2, 'Text', 'Quadtree min size (winsizeMin):');
-h.winsizeMin = uispinner(g2, 'Value', valOr(p,'winsizeMin',8), 'Limits', [1 64], 'Step', 1);
+pow2_min = [2 4 8 16 32 64];
+h.winsizeMin = uidropdown(g2, ...
+    'Items', arrayfun(@(v) sprintf('%d', v), pow2_min, 'UniformOutput', false), ...
+    'ItemsData', pow2_min, ...
+    'Value', nearestPow2(valOr(p,'winsizeMin',8), pow2_min));
+h.winsizeMin.Tooltip = 'Smallest quadtree element near mask edges. Power of 2, must be <= winstepsize.';
 
 uilabel(g2, 'Text', 'Parallel workers:');
 h.clusterNo = uispinner(g2, 'Value', valOr(p,'ClusterNo',1), 'Limits', [1 64], 'Step', 1);
@@ -633,6 +642,18 @@ end
 
 function v = valOr(p, field, def)
 if isfield(p, field) && ~isempty(p.(field)), v = p.(field); else, v = def; end
+end
+
+function v = nearestPow2(candidate, allowedList)
+% Pick the value in allowedList that is closest to candidate. Guarantees
+% the dropdown initial value matches one of its Items (otherwise uidropdown
+% warns + silently clamps).
+if isempty(candidate)
+    v = allowedList(1);
+    return;
+end
+[~, idx] = min(abs(allowedList - double(candidate)));
+v = allowedList(idx);
 end
 
 function v = valOrFirst(p, field, def)
