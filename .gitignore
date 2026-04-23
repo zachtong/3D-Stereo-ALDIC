@@ -21,6 +21,7 @@ results/
 
 # Private / unreleased example datasets
 examples/pig_heart/
+examples/pig_heart*
 
 # Test baseline (user-captured, machine-specific)
 tests/baseline/
